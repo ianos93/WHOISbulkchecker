@@ -389,8 +389,52 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .registrar-cell { color: var(--muted); font-size: 12px; max-width: 200px; }
+    .registrar-cell { color: var(--muted); font-size: 12px; max-width: 180px; }
     .expiry-cell    { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    /* ── EPP STATUS TAGS ── */
+    .epp-wrap { display: flex; flex-wrap: wrap; gap: 4px; max-width: 280px; }
+
+    .epp-tag {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      padding: 2px 7px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      cursor: default;
+      position: relative;
+    }
+
+    /* severity tiers */
+    .epp-critical { background: rgba(239,68,68,.15);  color: #fca5a5; border-color: rgba(239,68,68,.35); }
+    .epp-warn     { background: rgba(234,179,8,.13);  color: #fde68a; border-color: rgba(234,179,8,.35); }
+    .epp-ok       { background: rgba(34,197,94,.10);  color: #86efac; border-color: rgba(34,197,94,.28); }
+    .epp-neutral  { background: rgba(100,116,139,.12); color: #94a3b8; border-color: rgba(100,116,139,.25); }
+
+    /* tooltip */
+    .epp-tag[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e2530;
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 400;
+      padding: 6px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+      max-width: 260px;
+      white-space: normal;
+      z-index: 50;
+      box-shadow: 0 4px 16px rgba(0,0,0,.5);
+      pointer-events: none;
+      line-height: 1.5;
+    }
 
     .expiry-soon { color: var(--yellow); }
     .expiry-old  { color: var(--muted); }
@@ -467,10 +511,89 @@
     }
 
     @media (max-width: 600px) {
-      th:nth-child(3), td:nth-child(3),
-      th:nth-child(4), td:nth-child(4) { display: none; }
+      th:nth-child(4), td:nth-child(4),
+      th:nth-child(5), td:nth-child(5) { display: none; }
       .btn-export { margin-left: 0; }
     }
+    /* ── DROP ZONE ── */
+    .drop-zone {
+      border: 1.5px dashed var(--border2);
+      border-radius: 8px;
+      padding: 22px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(0,229,255,.04);
+    }
+
+    .drop-zone.drag-over { background: rgba(0,229,255,.08); }
+
+    .drop-icon {
+      color: var(--muted);
+      opacity: .7;
+      transition: color .2s, opacity .2s;
+    }
+
+    .drop-zone:hover .drop-icon,
+    .drop-zone.drag-over .drop-icon { color: var(--accent); opacity: 1; }
+
+    .drop-text {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .drop-text strong { color: var(--text); }
+
+    .drop-link {
+      color: var(--accent);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .drop-hint {
+      font-size: 11px;
+      color: var(--muted);
+      opacity: .6;
+      letter-spacing: .03em;
+    }
+
+    .drop-zone.loaded {
+      border-color: rgba(34,197,94,.4);
+      background: rgba(34,197,94,.04);
+    }
+
+    .drop-zone.loaded .drop-icon { color: var(--green); opacity: 1; }
+
+    /* ── OR DIVIDER ── */
+    .or-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 10px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .or-divider::before,
+    .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border2);
+    }
+
   </style>
 </head>
 <body>
@@ -485,6 +608,19 @@
 
     <div class="card">
       <div class="card-label">Domain List</div>
+
+      <!-- DROP ZONE -->
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".txt,.csv" style="display:none" onchange="handleFileInput(event)" />
+        <div class="drop-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="drop-text">Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span></div>
+        <div class="drop-hint">One domain per line · CSV column auto-detected</div>
+      </div>
+
+      <div class="or-divider"><span>or type manually</span></div>
+
       <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One domain per line. Up to 50 at a time."></textarea>
 
       <div class="options">
@@ -555,6 +691,117 @@
     let currentFilter = 'all';
     let running = false;
 
+    // ── FILE IMPORT ────────────────────────────────────────────────────────────
+
+    function initDropZone() {
+      const zone = document.getElementById('dropZone');
+
+      zone.addEventListener('dragover', e => {
+        e.preventDefault();
+        zone.classList.add('drag-over');
+      });
+
+      zone.addEventListener('dragleave', e => {
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+      });
+
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) processFile(file);
+      });
+    }
+
+    function handleFileInput(e) {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+      e.target.value = ''; // reset so same file can be re-selected
+    }
+
+    function processFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['txt', 'csv'].includes(ext)) {
+        showToast('⚠ Only .txt and .csv files are supported');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target.result;
+        const domains = ext === 'csv' ? parseCSVDomains(text) : parseTXTDomains(text);
+
+        if (!domains.length) {
+          showToast('⚠ No valid domains found in file');
+          return;
+        }
+
+        // Append to textarea (or replace if empty)
+        const ta = document.getElementById('domainInput');
+        const existing = ta.value.trim();
+        ta.value = existing ? existing + '\n' + domains.join('\n') : domains.join('\n');
+
+        // Visual feedback on drop zone
+        const zone = document.getElementById('dropZone');
+        zone.classList.add('loaded');
+        zone.querySelector('.drop-text').innerHTML =
+          `<strong>${file.name}</strong> — ${domains.length} domain${domains.length > 1 ? 's' : ''} loaded`;
+        zone.querySelector('.drop-hint').textContent = 'Click or drop another file to add more';
+
+        showToast(`✓ ${domains.length} domain${domains.length > 1 ? 's' : ''} imported from ${file.name}`);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseTXTDomains(text) {
+      return text.split(/\r?\n/)
+        .map(l => l.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, ''))
+        .filter(l => l && l.includes('.') && !l.startsWith('#'));
+    }
+
+    function parseCSVDomains(text) {
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (!lines.length) return [];
+
+      // Detect which column contains domains by scanning the first 5 rows
+      const rows = lines.map(l => splitCSVLine(l));
+      const numCols = Math.max(...rows.map(r => r.length));
+      let domainCol = 0;
+
+      // Score each column: count how many values look like domains
+      let bestScore = 0;
+      for (let c = 0; c < numCols; c++) {
+        const score = rows.slice(0, 10).filter(r => r[c] && looksLikeDomain(r[c])).length;
+        if (score > bestScore) { bestScore = score; domainCol = c; }
+      }
+
+      return rows
+        .map(r => (r[domainCol] || '').trim().toLowerCase()
+          .replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, ''))
+        .filter(d => looksLikeDomain(d));
+    }
+
+    function splitCSVLine(line) {
+      // Simple CSV split respecting quoted fields
+      const result = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQ = !inQ; continue; }
+        if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
+        cur += ch;
+      }
+      result.push(cur.trim());
+      return result;
+    }
+
+    function looksLikeDomain(s) {
+      return /^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]?\.[a-z]{2,}$/i.test(s.trim());
+    }
+
+    // Init on load
+    document.addEventListener('DOMContentLoaded', initDropZone);
+
     async function runCheck() {
       if (running) return;
       const raw = document.getElementById('domainInput').value.trim();
@@ -584,7 +831,7 @@
       renderTable();
 
       // seed table with pending rows
-      results = unique.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', raw: null }));
+      results = unique.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', eppCodes: [], raw: null }));
       renderTable();
 
       for (let i = 0; i < unique.length; i++) {
@@ -605,31 +852,73 @@
       showToast(`✓ Checked ${unique.length} domain${unique.length > 1 ? 's' : ''}`);
     }
 
+    // ── EPP STATUS KNOWLEDGE BASE ──────────────────────────────────────────────
+    // Maps RDAP/EPP status codes → { label, tier, tip }
+    // tier: 'critical' | 'warn' | 'ok' | 'neutral'
+    const EPP_META = {
+      // ── Hold / Suspension ──
+      'clientHold':                { label: 'clientHold',       tier: 'critical', tip: 'Registrar suspended this domain. DNS is NOT resolving.' },
+      'serverHold':                { label: 'serverHold',       tier: 'critical', tip: 'Registry suspended this domain. DNS is NOT resolving.' },
+      // ── Pending states ──
+      'pendingDelete':             { label: 'pendingDelete',    tier: 'critical', tip: 'Domain is queued for deletion. May be redeemable or about to drop.' },
+      'pendingRestore':            { label: 'pendingRestore',   tier: 'warn',     tip: 'Registrant has requested redemption but process is not yet complete.' },
+      'pendingCreate':             { label: 'pendingCreate',    tier: 'warn',     tip: 'Domain creation is in progress.' },
+      'pendingRenew':              { label: 'pendingRenew',     tier: 'warn',     tip: 'A renewal request is being processed.' },
+      'pendingTransfer':           { label: 'pendingTransfer',  tier: 'warn',     tip: 'A transfer to another registrar is in progress.' },
+      'pendingUpdate':             { label: 'pendingUpdate',    tier: 'warn',     tip: 'A domain update is pending registry processing.' },
+      // ── Transfer locks ──
+      'clientTransferProhibited':  { label: 'xferLock (client)',tier: 'neutral',  tip: 'Registrar-level transfer lock. Domain cannot be transferred away.' },
+      'serverTransferProhibited':  { label: 'xferLock (server)',tier: 'neutral',  tip: 'Registry-level transfer lock. Common on newly registered domains (60-day ICANN lock).' },
+      // ── Delete locks ──
+      'clientDeleteProhibited':    { label: 'deleteLock (client)', tier: 'ok',    tip: 'Registrar-set delete lock. Protects domain from accidental deletion.' },
+      'serverDeleteProhibited':    { label: 'deleteLock (server)', tier: 'ok',    tip: 'Registry-set delete lock. Strong protection against deletion.' },
+      // ── Update locks ──
+      'clientUpdateProhibited':    { label: 'updateLock (client)', tier: 'ok',    tip: 'Registrar-set update lock. Domain details cannot be modified.' },
+      'serverUpdateProhibited':    { label: 'updateLock (server)', tier: 'ok',    tip: 'Registry-set update lock. Domain details cannot be modified at registry level.' },
+      // ── Renew lock ──
+      'clientRenewProhibited':     { label: 'renewLock (client)', tier: 'warn',   tip: 'Registrar has blocked renewal. Domain may be at risk of expiry.' },
+      'serverRenewProhibited':     { label: 'renewLock (server)', tier: 'warn',   tip: 'Registry has blocked renewal.' },
+      // ── Good standing ──
+      'ok':                        { label: 'ok',                tier: 'ok',      tip: 'Domain is active with no restrictions.' },
+      'active':                    { label: 'active',            tier: 'ok',      tip: 'Domain is active.' },
+      'linked':                    { label: 'linked',            tier: 'ok',      tip: 'Domain has associated nameserver objects.' },
+      // ── Redemption ──
+      'redemptionPeriod':          { label: 'redemption',        tier: 'critical',tip: 'Domain has expired and entered the redemption grace period (typically 30 days). Can be restored at extra cost.' },
+      'autoRenewPeriod':           { label: 'autoRenew',         tier: 'warn',    tip: 'Domain was auto-renewed; within the post-renewal grace period.' },
+      'addPeriod':                 { label: 'addPeriod',         tier: 'neutral',  tip: 'Within the initial grace period after registration.' },
+      'renewPeriod':               { label: 'renewPeriod',       tier: 'neutral',  tip: 'Within the grace period after a manual renewal.' },
+      'transferPeriod':            { label: 'transferPeriod',    tier: 'neutral',  tip: 'Within the grace period after a registrar transfer.' },
+    };
+
+    function getEPPMeta(code) {
+      const key = code.toLowerCase().trim();
+      return EPP_META[key] || { label: code, tier: 'neutral', tip: null };
+    }
+
     async function checkDomain(domain) {
       try {
-        // Use RDAP (Registration Data Access Protocol) — ICANN-standard, no key needed
         const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
 
         if (res.status === 404) {
-          return { domain, status: 'available', registrar: '—', expiry: '—', raw: null };
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], raw: null };
         }
-
         if (!res.ok) {
-          return { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', raw: null };
+          return { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', eppCodes: [], raw: null };
         }
 
         const data = await res.json();
         const registrar = extractRegistrar(data);
         const expiry    = extractExpiry(data);
+        const eppCodes  = extractEPP(data);
 
-        return { domain, status: 'registered', registrar, expiry, raw: data };
+        return { domain, status: 'registered', registrar, expiry, eppCodes, raw: data };
 
       } catch (e) {
         if (e.name === 'TimeoutError') {
-          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', raw: null };
+          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', eppCodes: [], raw: null };
         }
-        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', raw: null };
+        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', eppCodes: [], raw: null };
       }
     }
 
@@ -663,6 +952,31 @@
       return '—';
     }
 
+    function extractEPP(data) {
+      // RDAP stores status as array of strings, possibly with URL pairs
+      const raw = data.status || [];
+      const codes = [];
+      for (const item of raw) {
+        if (typeof item === 'string') {
+          // strip leading/trailing whitespace, normalise
+          const code = item.trim();
+          if (code) codes.push(code);
+        }
+      }
+      // deduplicate preserving order
+      return [...new Set(codes)];
+    }
+
+    function renderEPPTags(codes) {
+      if (!codes || codes.length === 0) return '<span style="color:var(--muted);font-size:12px">—</span>';
+      const tags = codes.map(code => {
+        const meta = getEPPMeta(code);
+        const tipAttr = meta.tip ? ` data-tip="${escAttr(meta.tip)}"` : '';
+        return `<span class="epp-tag epp-${meta.tier}"${tipAttr}>${escHtml(meta.label)}</span>`;
+      }).join('');
+      return `<div class="epp-wrap">${tags}</div>`;
+    }
+
     function renderTable() {
       const filtered = results.filter(r => {
         if (currentFilter === 'all') return true;
@@ -691,6 +1005,7 @@
                 : r.domain}
             </td>
             <td>${statusBadge(r.status)}</td>
+            <td>${renderEPPTags(r.eppCodes)}</td>
             <td class="registrar-cell">${escHtml(r.registrar)}</td>
             <td class="expiry-cell">${expiryCell(r.expiry)}</td>
           </tr>`;
@@ -702,7 +1017,8 @@
             <thead>
               <tr>
                 <th>Domain</th>
-                <th>Status</th>
+                <th>Avail.</th>
+                <th>EPP Flags</th>
                 <th>Registrar</th>
                 <th>Expiry</th>
               </tr>
@@ -759,9 +1075,9 @@
 
     function exportCSV() {
       if (!results.length) return;
-      const header = 'Domain,Status,Registrar,Expiry';
+      const header = 'Domain,Availability,EPP Flags,Registrar,Expiry';
       const rows = results.map(r =>
-        `"${r.domain}","${r.status}","${r.registrar}","${r.expiry}"`
+        `"${r.domain}","${r.status}","${(r.eppCodes||[]).join(' | ')}","${r.registrar}","${r.expiry}"`
       );
       const csv = [header, ...rows].join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -800,6 +1116,10 @@
       return String(s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escAttr(s) {
+      return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
