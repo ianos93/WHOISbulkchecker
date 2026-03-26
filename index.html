@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BulkWHOIS — Domain Status Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0b0d0f;
+      --surface:  #111417;
+      --border:   #1f2428;
+      --border2:  #2a3038;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --accent:   #00e5ff;
+      --accent2:  #7c3aed;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --yellow:   #eab308;
+      --font-head: 'Syne', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── GRID BACKGROUND ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: .4;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── GLOW ORBS ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px; left: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,229,255,.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orb2 {
+      position: fixed;
+      bottom: -150px; right: -150px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(124,58,237,.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+
+    .logo {
+      font-family: var(--font-head);
+      font-weight: 800;
+      font-size: clamp(28px, 5vw, 42px);
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid rgba(0,229,255,.3);
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(0,229,255,.05);
+      align-self: center;
+    }
+
+    .tagline {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 36px;
+      letter-spacing: .02em;
+    }
+
+    /* ── INPUT CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      resize: vertical;
+      transition: border-color .2s;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,255,.08);
+    }
+
+    textarea::placeholder { color: var(--muted); opacity: .7; }
+
+    /* ── OPTIONS ROW ── */
+    .options {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .delay-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    select {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+
+    select:focus { border-color: var(--accent); }
+
+    /* ── BUTTONS ── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      transition: all .18s ease;
+      letter-spacing: .02em;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, #0097a7 100%);
+      color: #000;
+    }
+
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,229,255,.3); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border2);
+    }
+
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+
+    .btn-export {
+      background: transparent;
+      color: var(--green);
+      border: 1px solid rgba(34,197,94,.3);
+      margin-left: auto;
+    }
+
+    .btn-export:hover { background: rgba(34,197,94,.08); }
+    .btn-export:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* ── PROGRESS ── */
+    .progress-wrap { margin-bottom: 20px; display: none; }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .progress-bar-bg {
+      height: 4px;
+      background: var(--border2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 4px;
+      transition: width .3s ease;
+      width: 0%;
+    }
+
+    /* ── STATS ROW ── */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid transparent;
+    }
+
+    .stat-pill.all   { border-color: var(--border2); color: var(--muted); }
+    .stat-pill.reg   { border-color: rgba(239,68,68,.3); color: var(--red); background: rgba(239,68,68,.05); }
+    .stat-pill.avail { border-color: rgba(34,197,94,.3); color: var(--green); background: rgba(34,197,94,.05); }
+    .stat-pill.err   { border-color: rgba(234,179,8,.3); color: var(--yellow); background: rgba(234,179,8,.05); }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .dot-red    { background: var(--red); }
+    .dot-green  { background: var(--green); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-muted  { background: var(--muted); }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead { background: rgba(255,255,255,.03); }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border2);
+      font-weight: 600;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr {
+      transition: background .15s;
+      animation: rowIn .25s ease both;
+    }
+
+    @keyframes rowIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,.025); }
+
+    .domain-cell { font-weight: 500; color: var(--text); }
+    .domain-cell a { color: var(--accent); text-decoration: none; }
+    .domain-cell a:hover { text-decoration: underline; }
+
+    /* STATUS BADGES */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      white-space: nowrap;
+    }
+
+    .status-registered {
+      background: rgba(239,68,68,.12);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,.25);
+    }
+
+    .status-available {
+      background: rgba(34,197,94,.12);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,.25);
+    }
+
+    .status-error {
+      background: rgba(234,179,8,.12);
+      color: #fbbf24;
+      border: 1px solid rgba(234,179,8,.25);
+    }
+
+    .status-pending {
+      background: rgba(100,116,139,.12);
+      color: var(--muted);
+      border: 1px solid rgba(100,116,139,.2);
+    }
+
+    /* SPINNER */
+    .spinner {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .registrar-cell { color: var(--muted); font-size: 12px; max-width: 200px; }
+    .expiry-cell    { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    .expiry-soon { color: var(--yellow); }
+    .expiry-old  { color: var(--muted); }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state .icon { font-size: 36px; margin-bottom: 12px; opacity: .4; }
+    .empty-state p { font-size: 13px; }
+
+    /* FILTER BAR */
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .filter-btn:hover,
+    .filter-btn.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(0,229,255,.08);
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all .25s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* FOOTER */
+    footer {
+      margin-top: 48px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: .5;
+      letter-spacing: .04em;
+    }
+
+    @media (max-width: 600px) {
+      th:nth-child(3), td:nth-child(3),
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      .btn-export { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb2"></div>
+  <div class="wrap">
+
+    <header>
+      <span class="logo">BulkWHOIS</span>
+      <span class="badge">v1.0</span>
+    </header>
+    <p class="tagline">// paste domains, check registration status in bulk</p>
+
+    <div class="card">
+      <div class="card-label">Domain List</div>
+      <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One domain per line. Up to 50 at a time."></textarea>
+
+      <div class="options">
+        <span class="delay-label">Request delay:</span>
+        <select id="delaySelect">
+          <option value="600">600ms (safe)</option>
+          <option value="300">300ms (fast)</option>
+          <option value="1000">1000ms (slow)</option>
+          <option value="1500">1500ms (very slow)</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="runBtn" onclick="runCheck()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Check Domains
+        </button>
+        <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        <button class="btn btn-export" id="exportBtn" onclick="exportCSV()" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-header">
+        <span id="progressLabel">Checking...</span>
+        <span id="progressCount">0 / 0</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat-pill all"><span class="dot dot-muted"></span><span id="statTotal">0</span> total</div>
+      <div class="stat-pill reg"><span class="dot dot-red"></span><span id="statReg">0</span> registered</div>
+      <div class="stat-pill avail"><span class="dot dot-green"></span><span id="statAvail">0</span> available</div>
+      <div class="stat-pill err"><span class="dot dot-yellow"></span><span id="statErr">0</span> errors</div>
+    </div>
+
+    <!-- FILTER -->
+    <div class="filter-bar" id="filterBar" style="display:none">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('registered', this)">Registered</button>
+      <button class="filter-btn" onclick="setFilter('available', this)">Available</button>
+      <button class="filter-btn" onclick="setFilter('error', this)">Errors</button>
+    </div>
+
+    <!-- TABLE -->
+    <div id="tableContainer">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">⬛</div>
+        <p>Enter domains above and hit <strong>Check Domains</strong></p>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>BulkWHOIS — uses rdap.org public API &nbsp;·&nbsp; no data stored</footer>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let results = [];
+    let currentFilter = 'all';
+    let running = false;
+
+    async function runCheck() {
+      if (running) return;
+      const raw = document.getElementById('domainInput').value.trim();
+      if (!raw) return showToast('⚠ Paste at least one domain first');
+
+      const domains = raw.split('\n')
+        .map(d => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, ''))
+        .filter(d => d && d.includes('.'));
+
+      const unique = [...new Set(domains)].slice(0, 50);
+      if (unique.length === 0) return showToast('⚠ No valid domains found');
+      if (domains.length > 50) showToast('ℹ Capped at 50 domains');
+
+      running = true;
+      results = [];
+      currentFilter = 'all';
+      const delay = parseInt(document.getElementById('delaySelect').value);
+
+      document.getElementById('runBtn').disabled = true;
+      document.getElementById('exportBtn').disabled = true;
+      document.getElementById('progressWrap').style.display = 'block';
+      document.getElementById('statsRow').style.display = 'flex';
+      document.getElementById('filterBar').style.display = 'flex';
+      setFilter('all', document.querySelector('.filter-btn'));
+
+      updateStats();
+      renderTable();
+
+      // seed table with pending rows
+      results = unique.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', raw: null }));
+      renderTable();
+
+      for (let i = 0; i < unique.length; i++) {
+        const domain = unique[i];
+        updateProgress(i, unique.length, domain);
+        const res = await checkDomain(domain);
+        results[i] = res;
+        updateStats();
+        renderTable();
+        if (i < unique.length - 1) await sleep(delay);
+      }
+
+      updateProgress(unique.length, unique.length, '');
+      document.getElementById('progressLabel').textContent = 'Done ✓';
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('exportBtn').disabled = false;
+      running = false;
+      showToast(`✓ Checked ${unique.length} domain${unique.length > 1 ? 's' : ''}`);
+    }
+
+    async function checkDomain(domain) {
+      try {
+        // Use RDAP (Registration Data Access Protocol) — ICANN-standard, no key needed
+        const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+
+        if (res.status === 404) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', raw: null };
+        }
+
+        if (!res.ok) {
+          return { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', raw: null };
+        }
+
+        const data = await res.json();
+        const registrar = extractRegistrar(data);
+        const expiry    = extractExpiry(data);
+
+        return { domain, status: 'registered', registrar, expiry, raw: data };
+
+      } catch (e) {
+        if (e.name === 'TimeoutError') {
+          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', raw: null };
+        }
+        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', raw: null };
+      }
+    }
+
+    function extractRegistrar(data) {
+      if (!data.entities) return '—';
+      for (const e of data.entities) {
+        const roles = e.roles || [];
+        if (roles.includes('registrar')) {
+          if (e.vcardArray) {
+            const vcard = e.vcardArray[1] || [];
+            for (const v of vcard) {
+              if (v[0] === 'fn') return v[3] || '—';
+            }
+          }
+          return e.handle || '—';
+        }
+      }
+      return '—';
+    }
+
+    function extractExpiry(data) {
+      const events = data.events || [];
+      for (const ev of events) {
+        if (ev.eventAction === 'expiration') {
+          try {
+            const d = new Date(ev.eventDate);
+            return d.toISOString().split('T')[0];
+          } catch { return '—'; }
+        }
+      }
+      return '—';
+    }
+
+    function renderTable() {
+      const filtered = results.filter(r => {
+        if (currentFilter === 'all') return true;
+        if (currentFilter === 'registered') return r.status === 'registered';
+        if (currentFilter === 'available')  return r.status === 'available';
+        if (currentFilter === 'error')      return r.status === 'error';
+        return true;
+      });
+
+      if (results.length === 0) {
+        document.getElementById('tableContainer').innerHTML = `
+          <div class="empty-state" id="emptyState">
+            <div class="icon">⬛</div>
+            <p>Enter domains above and hit <strong>Check Domains</strong></p>
+          </div>`;
+        return;
+      }
+
+      let rows = '';
+      for (const r of filtered) {
+        rows += `
+          <tr>
+            <td class="domain-cell">
+              ${r.status === 'registered'
+                ? `<a href="https://who.is/whois/${r.domain}" target="_blank" rel="noopener">${r.domain}</a>`
+                : r.domain}
+            </td>
+            <td>${statusBadge(r.status)}</td>
+            <td class="registrar-cell">${escHtml(r.registrar)}</td>
+            <td class="expiry-cell">${expiryCell(r.expiry)}</td>
+          </tr>`;
+      }
+
+      document.getElementById('tableContainer').innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Domain</th>
+                <th>Status</th>
+                <th>Registrar</th>
+                <th>Expiry</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function statusBadge(status) {
+      const map = {
+        registered: `<span class="status-badge status-registered"><span class="dot dot-red"></span>Registered</span>`,
+        available:  `<span class="status-badge status-available"><span class="dot dot-green"></span>Available</span>`,
+        error:      `<span class="status-badge status-error"><span class="dot dot-yellow"></span>Error</span>`,
+        pending:    `<span class="status-badge status-pending"><span class="spinner"></span>Checking…</span>`,
+      };
+      return map[status] || status;
+    }
+
+    function expiryCell(expiry) {
+      if (!expiry || expiry === '—') return '<span style="color:var(--muted)">—</span>';
+      try {
+        const d = new Date(expiry);
+        const now = new Date();
+        const daysLeft = Math.floor((d - now) / 86400000);
+        if (daysLeft < 60)  return `<span class="expiry-soon">${expiry} ⚠</span>`;
+        return `<span class="expiry-old">${expiry}</span>`;
+      } catch { return expiry; }
+    }
+
+    function updateStats() {
+      const reg   = results.filter(r => r.status === 'registered').length;
+      const avail = results.filter(r => r.status === 'available').length;
+      const err   = results.filter(r => r.status === 'error').length;
+      document.getElementById('statTotal').textContent = results.length;
+      document.getElementById('statReg').textContent   = reg;
+      document.getElementById('statAvail').textContent = avail;
+      document.getElementById('statErr').textContent   = err;
+    }
+
+    function updateProgress(done, total, current) {
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressCount').textContent = `${done} / ${total}`;
+      document.getElementById('progressLabel').textContent = current ? `Checking ${current}…` : 'Checking…';
+    }
+
+    function setFilter(f, btn) {
+      currentFilter = f;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderTable();
+    }
+
+    function exportCSV() {
+      if (!results.length) return;
+      const header = 'Domain,Status,Registrar,Expiry';
+      const rows = results.map(r =>
+        `"${r.domain}","${r.status}","${r.registrar}","${r.expiry}"`
+      );
+      const csv = [header, ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `whois-bulk-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('✓ CSV exported');
+    }
+
+    function clearAll() {
+      if (running) return;
+      document.getElementById('domainInput').value = '';
+      results = [];
+      document.getElementById('progressWrap').style.display = 'none';
+      document.getElementById('statsRow').style.display = 'none';
+      document.getElementById('filterBar').style.display = 'none';
+      document.getElementById('exportBtn').disabled = true;
+      document.getElementById('tableContainer').innerHTML = `
+        <div class="empty-state" id="emptyState">
+          <div class="icon">⬛</div>
+          <p>Enter domains above and hit <strong>Check Domains</strong></p>
+        </div>`;
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  </script>
+</body>
+</html>
