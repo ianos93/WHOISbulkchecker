@@ -565,6 +565,49 @@
       .btn-export { margin-left: 0; }
       .filter-section { gap: 14px; }
     }
+    /* ── CACHE BAR ── */
+    .cache-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--para);
+      margin-bottom: 16px;
+      padding: 0 2px;
+    }
+
+    .btn-cache-clear {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 2px 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color .15s;
+    }
+
+    .btn-cache-clear:hover { color: var(--red-lt); }
+
+    .cache-badge {
+      display: inline-block;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(255,137,6,.1);
+      border: 1px solid rgba(255,137,6,.25);
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -614,6 +657,12 @@
           Export CSV
         </button>
       </div>
+    </div>
+
+    <!-- CACHE INFO -->
+    <div class="cache-bar">
+      <span id="cacheInfo" style="opacity:.4">Cache empty</span>
+      <button class="btn-cache-clear" onclick="cacheClear()">Clear cache</button>
     </div>
 
     <!-- PROGRESS -->
@@ -782,7 +831,10 @@
     }
 
     // Init on load
-    document.addEventListener('DOMContentLoaded', initDropZone);
+    document.addEventListener('DOMContentLoaded', () => {
+      initDropZone();
+      updateCacheInfo();
+    });
 
     async function runCheck() {
       if (running) return;
@@ -824,16 +876,24 @@
         results[i] = res;
         updateStats();
         renderTable();
-        if (i < unique.length - 1) await sleep(delay);
+        // Only delay for live API calls, not cache hits
+        if (!res.fromCache && i < unique.length - 1) await sleep(delay);
       }
+
+      const cached = results.filter(r => r.fromCache).length;
+      const live   = unique.length - cached;
 
       updateProgress(unique.length, unique.length, '');
       document.getElementById('progressLabel').textContent = 'Done ✓';
       document.getElementById('runBtn').disabled = false;
       document.getElementById('exportBtn').disabled = false;
       updateEPPFilterBar();
+      updateCacheInfo();
       running = false;
-      showToast(`✓ Checked ${unique.length} domain${unique.length > 1 ? 's' : ''}`);
+      const summary = cached > 0
+        ? `✓ ${live} fetched, ${cached} from cache`
+        : `✓ Checked ${unique.length} domain${unique.length > 1 ? 's' : ''}`;
+      showToast(summary);
     }
 
     // ── EPP STATUS KNOWLEDGE BASE ──────────────────────────────────────────────
@@ -879,30 +939,99 @@
       return EPP_META[key] || { label: code, tier: 'neutral', tip: null };
     }
 
+    // ── CACHE ──────────────────────────────────────────────────────────────────
+    const CACHE_KEY = 'bulkwhois_cache';
+    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+    function cacheLoad() {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+      catch { return {}; }
+    }
+
+    function cacheSave(store) {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(store)); } catch {}
+    }
+
+    function cacheGet(domain) {
+      const store = cacheLoad();
+      const entry = store[domain];
+      if (!entry) return null;
+      if (Date.now() - entry.ts > CACHE_TTL) {
+        // expired — remove it
+        delete store[domain];
+        cacheSave(store);
+        return null;
+      }
+      return entry.data;
+    }
+
+    function cacheSet(domain, data) {
+      const store = cacheLoad();
+      store[domain] = { ts: Date.now(), data };
+      cacheSave(store);
+    }
+
+    function cacheClear() {
+      localStorage.removeItem(CACHE_KEY);
+      updateCacheInfo();
+      showToast('Cache cleared');
+    }
+
+    function cacheStats() {
+      const store = cacheLoad();
+      const now = Date.now();
+      const entries = Object.entries(store);
+      const valid   = entries.filter(([, v]) => now - v.ts <= CACHE_TTL);
+      return { total: entries.length, valid: valid.length };
+    }
+
+    function updateCacheInfo() {
+      const el = document.getElementById('cacheInfo');
+      if (!el) return;
+      const { valid } = cacheStats();
+      if (valid === 0) {
+        el.textContent = 'Cache empty';
+        el.style.opacity = '.4';
+      } else {
+        el.textContent = `${valid} domain${valid !== 1 ? 's' : ''} cached`;
+        el.style.opacity = '1';
+      }
+    }
+
     async function checkDomain(domain) {
+      // Check cache first
+      const cached = cacheGet(domain);
+      if (cached) return { ...cached, fromCache: true };
+
       try {
         const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
 
+        let result;
         if (res.status === 404) {
-          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], raw: null };
-        }
-        if (!res.ok) {
-          return { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', eppCodes: [], raw: null };
+          result = { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [] };
+        } else if (!res.ok) {
+          result = { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', eppCodes: [] };
+        } else {
+          const data = await res.json();
+          result = {
+            domain,
+            status:    'registered',
+            registrar: extractRegistrar(data),
+            expiry:    extractExpiry(data),
+            eppCodes:  extractEPP(data),
+          };
         }
 
-        const data = await res.json();
-        const registrar = extractRegistrar(data);
-        const expiry    = extractExpiry(data);
-        const eppCodes  = extractEPP(data);
-
-        return { domain, status: 'registered', registrar, expiry, eppCodes, raw: data };
+        // Only cache non-error results
+        if (result.status !== 'error') cacheSet(domain, result);
+        return { ...result, raw: null, fromCache: false };
 
       } catch (e) {
         if (e.name === 'TimeoutError') {
-          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', eppCodes: [], raw: null };
+          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', eppCodes: [], fromCache: false };
         }
-        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', eppCodes: [], raw: null };
+        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', eppCodes: [], fromCache: false };
       }
     }
 
@@ -980,8 +1109,8 @@
       if (results.length === 0) {
         document.getElementById('tableContainer').innerHTML = `
           <div class="empty-state" id="emptyState">
-            <div class="icon">⬛</div>
-            <p>Enter domains above and hit <strong>Check Domains</strong></p>
+            <div class="icon">🔍</div>
+            <p>Enter domains above and click <strong>Check Domains</strong></p>
           </div>`;
         return;
       }
@@ -994,6 +1123,7 @@
               ${r.status === 'registered'
                 ? `<a href="https://who.is/whois/${r.domain}" target="_blank" rel="noopener">${r.domain}</a>`
                 : r.domain}
+              ${r.fromCache ? `<span class="cache-badge" title="Result loaded from local cache">cached</span>` : ''}
             </td>
             <td>${statusBadge(r.status)}</td>
             <td>${renderEPPTags(r.eppCodes)}</td>
@@ -1128,14 +1258,22 @@
       if (running) return;
       document.getElementById('domainInput').value = '';
       results = [];
+      currentStatusFilter = 'all';
+      currentEPPFilter    = null;
       document.getElementById('progressWrap').style.display = 'none';
       document.getElementById('statsRow').style.display = 'none';
-      document.getElementById('filterBar').style.display = 'none';
+      document.getElementById('filterSection').style.display = 'none';
+      document.getElementById('eppFilterGroup').style.display = 'none';
       document.getElementById('exportBtn').disabled = true;
+      // reset drop zone
+      const zone = document.getElementById('dropZone');
+      zone.classList.remove('loaded');
+      zone.querySelector('.drop-text').innerHTML = `Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span>`;
+      zone.querySelector('.drop-hint').textContent = 'One domain per line · CSV column auto-detected';
       document.getElementById('tableContainer').innerHTML = `
         <div class="empty-state" id="emptyState">
-          <div class="icon">⬛</div>
-          <p>Enter domains above and hit <strong>Check Domains</strong></p>
+          <div class="icon">🔍</div>
+          <p>Enter domains above and click <strong>Check Domains</strong></p>
         </div>`;
     }
 
