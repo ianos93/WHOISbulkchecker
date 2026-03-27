@@ -628,7 +628,7 @@
       border: 1px solid rgba(255,137,6,.25);
     }
 
-    .source-badge.source-whois {
+    .source-badge {
       color: var(--para);
       background: rgba(167,169,190,.08);
       border: 1px solid rgba(167,169,190,.2);
@@ -812,7 +812,12 @@
      * Returns { valid: string[], skipped: { raw, reason }[] }
      */
     function parseAndValidateDomains(text) {
-      const lines = text.split(/\r?\n/).slice(0, MAX_DOMAINS * 4); // guard huge pastes early
+      // Normalize separators: commas, spaces between domains, and newlines all accepted
+      const normalized = text
+        .replace(/,/g, '\n')           // commas → newlines
+        .replace(/[ \t]+/g, '\n');     // whitespace runs → newlines (handles space-separated)
+
+      const lines = normalized.split(/\r?\n/).slice(0, MAX_DOMAINS * 4);
       const valid   = [];
       const skipped = [];
       const seen    = new Set();
@@ -823,7 +828,7 @@
           if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
           continue;
         }
-        if (seen.has(r.domain)) continue; // deduplicate
+        if (seen.has(r.domain)) continue;
         seen.add(r.domain);
         if (valid.length >= MAX_DOMAINS) {
           skipped.push({ raw: r.domain, reason: `cap of ${MAX_DOMAINS} reached` });
@@ -921,65 +926,131 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // RDAP + WHOIS FALLBACK
+    // ABORT SIGNAL POLYFILL  (Safari < 16 doesn't have AbortSignal.timeout)
     // ─────────────────────────────────────────────────────────────────────────
+    function makeSignal(ms) {
+      if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), ms);
+      return ctrl.signal;
+    }
 
-    /**
-     * Fetch via RDAP (primary). On failure / no-RDAP, try WHOIS JSON fallback.
-     * Returns a normalised result object.
-     */
+    // ─────────────────────────────────────────────────────────────────────────
+    // IANA RDAP BOOTSTRAP  (TLD → authoritative RDAP base URL)
+    // Cached in memory for the session so we only fetch dns.json once.
+    // ─────────────────────────────────────────────────────────────────────────
+    let _rdapBootstrap = null; // Map<tld, url[]>
+
+    async function getRDAPBase(tld) {
+      if (!_rdapBootstrap) {
+        try {
+          const res = await fetch('https://data.iana.org/rdap/dns.json', { signal: makeSignal(6000) });
+          if (res.ok) {
+            const json = await res.json();
+            _rdapBootstrap = new Map();
+            for (const [tlds, urls] of json.services) {
+              for (const t of tlds) _rdapBootstrap.set(t.toLowerCase(), urls[0]);
+            }
+          }
+        } catch { /* silently fall back to rdap.org */ }
+        if (!_rdapBootstrap) _rdapBootstrap = new Map(); // empty sentinel
+      }
+      return _rdapBootstrap.get(tld.toLowerCase()) || null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RDAP FETCH  (primary: direct registry RDAP, fallback: rdap.org proxy)
+    // ─────────────────────────────────────────────────────────────────────────
     async function checkDomain(domain) {
-      // 1. Cache hit — instant, no network
+      // 1. Cache hit
       const cached = cacheGet(domain);
       if (cached) return { ...cached, fromCache: true };
 
       // 2. Rate-limit gate
       await rateLimiter.wait();
 
-      // 3. Try RDAP
-      let result = await fetchRDAP(domain);
+      // 3. Try direct registry RDAP via IANA bootstrap first,
+      //    then fall back to rdap.org proxy if bootstrap fails or TLD unknown.
+      const tld = domain.split('.').pop();
+      const registryBase = await getRDAPBase(tld);
 
-      // 4. Fallback to WHOIS JSON if RDAP errored (not if domain was simply missing/404)
-      if (result.status === 'error' && result.fallback) {
+      let result = await fetchRDAP(domain, registryBase);
+
+      // 4. If direct registry RDAP failed, try rdap.org as a proxy fallback
+      if (result._failed && registryBase) {
         await rateLimiter.wait();
-        result = await fetchWHOISjson(domain);
+        result = await fetchRDAP(domain, null); // null → use rdap.org
       }
 
-      // 5. Cache successful results
-      if (result.status !== 'error') cacheSet(domain, result);
-      return { ...result, fromCache: false };
+      // 5. Cache successful results only
+      if (!result._failed) {
+        const { _failed, ...clean } = result;
+        cacheSet(domain, clean);
+        return { ...clean, fromCache: false };
+      }
+
+      // Return the error result as-is (don't cache errors)
+      const { _failed, ...errResult } = result;
+      return { ...errResult, fromCache: false };
     }
 
-    async function fetchRDAP(domain) {
-      try {
-        const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
+    async function fetchRDAP(domain, registryBase) {
+      // registryBase=null → use rdap.org proxy (handles CORS itself)
+      // registryBase='https://rdap.verisign.com/com/v1/' → direct registry
+      const base = registryBase
+        ? registryBase.replace(/\/$/, '')
+        : 'https://rdap.org';
+      const url = `${base}/domain/${encodeURIComponent(domain)}`;
 
+      try {
+        const res = await fetch(url, {
+          signal: makeSignal(10000),
+          // 'omit' credentials avoids CORS preflight on cross-origin RDAP servers
+          credentials: 'omit',
+        });
+
+        // RDAP servers sometimes return 200 with an errorCode body
         if (res.status === 404) {
           return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
         }
 
         if (res.status === 429) {
           await rateLimiter.backoff();
-          // Retry once after backoff
-          const retry = await fetch(url, { signal: AbortSignal.timeout(9000) });
-          if (!retry.ok) return { domain, status: 'error', registrar: `Rate limited (${retry.status})`, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
-          const data = await retry.json();
-          return parseRDAPResponse(domain, data);
+          await rateLimiter.wait(); // re-acquire token after backoff
+          const retry = await fetch(url, { signal: makeSignal(10000), credentials: 'omit' });
+          if (retry.status === 404) {
+            return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
+          }
+          if (!retry.ok) return _rdapError(domain, `RDAP ${retry.status}`);
+          const retryData = await retry.json();
+          if (retryData.errorCode) return _rdapError(domain, `RDAP error ${retryData.errorCode}`);
+          return parseRDAPResponse(domain, retryData);
         }
 
-        if (!res.ok) {
-          // 5xx or unexpected → try fallback
-          return { domain, status: 'error', registrar: `RDAP ${res.status}`, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
-        }
+        if (!res.ok) return _rdapError(domain, `RDAP ${res.status}`);
 
         const data = await res.json();
+
+        // Check for RDAP-level error embedded in a 200 response
+        if (data.errorCode) {
+          if (data.errorCode === 404) {
+            return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
+          }
+          return _rdapError(domain, `RDAP error ${data.errorCode}`);
+        }
+
         return parseRDAPResponse(domain, data);
 
       } catch (e) {
-        const reason = e.name === 'TimeoutError' ? 'RDAP timeout' : `RDAP: ${e.message.slice(0, 40)}`;
-        return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
+        const reason = (e.name === 'TimeoutError' || e.name === 'AbortError')
+          ? 'RDAP timeout'
+          : `RDAP: ${e.message.slice(0, 50)}`;
+        return _rdapError(domain, reason);
       }
+    }
+
+    function _rdapError(domain, reason) {
+      return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], source: 'RDAP', _failed: true };
     }
 
     function parseRDAPResponse(domain, data) {
@@ -990,54 +1061,6 @@
         expiry:    extractExpiry(data),
         eppCodes:  extractEPP(data),
         source:    'RDAP',
-      };
-    }
-
-    async function fetchWHOISjson(domain) {
-      try {
-        // whoisjson.com — free, CORS-enabled WHOIS JSON API, no key needed
-        const url = `https://whoisjson.com/api/v1/whois?domain=${encodeURIComponent(domain)}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-
-        if (res.status === 404) {
-          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'WHOIS' };
-        }
-
-        if (res.status === 429) {
-          await rateLimiter.backoff();
-          return { domain, status: 'error', registrar: 'Rate limited', expiry: '—', eppCodes: [], source: 'WHOIS' };
-        }
-
-        if (!res.ok) {
-          return { domain, status: 'error', registrar: `WHOIS ${res.status}`, expiry: '—', eppCodes: [], source: 'WHOIS' };
-        }
-
-        const data = await res.json();
-        return parseWHOISjsonResponse(domain, data);
-
-      } catch (e) {
-        const reason = e.name === 'TimeoutError' ? 'WHOIS timeout' : `WHOIS: ${e.message.slice(0, 40)}`;
-        return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], source: 'WHOIS' };
-      }
-    }
-
-    function parseWHOISjsonResponse(domain, d) {
-      // whoisjson.com response shape
-      const registrar = d.registrar?.name || d.registrar || '—';
-      const expiry    = d.expires        || d.expiry_date || d.expiration_date || '—';
-      const rawStatus = d.status         || d.domain_status || [];
-      const eppCodes  = Array.isArray(rawStatus)
-        ? [...new Set(rawStatus.map(s => (typeof s === 'string' ? s.split(' ')[0].trim() : '')).filter(Boolean))]
-        : [];
-      const formattedExpiry = expiry !== '—' ? expiry.slice(0, 10) : '—';
-
-      return {
-        domain,
-        status:    'registered',
-        registrar: typeof registrar === 'string' ? registrar : '—',
-        expiry:    formattedExpiry,
-        eppCodes,
-        source:    'WHOIS',
       };
     }
 
@@ -1402,11 +1425,10 @@
       for (let i = 0; i < valid.length; i++) {
         updateProgress(i, valid.length, valid[i]);
         results[i] = await checkDomain(valid[i]);
-        // Micro-batch: only re-render every 3 rows to reduce DOM thrash
-        if (i % 3 === 0 || i === valid.length - 1) {
-          renderTable();
-          updateStats();
-        }
+        // Update progress label to show completed domain
+        updateProgress(i + 1, valid.length, i < valid.length - 1 ? valid[i + 1] : '');
+        renderTable();
+        updateStats();
       }
 
       updateProgress(valid.length, valid.length, '');
