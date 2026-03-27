@@ -30,6 +30,38 @@
       --shadow:    0 2px 12px rgba(0,0,0,.35);
     }
 
+    /* ── SCROLLBARS ── */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+      border-radius: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border2);
+      border-radius: 8px;
+      border: 2px solid var(--bg);
+      transition: background .2s;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: var(--bg);
+    }
+
+    /* Firefox */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) var(--bg);
+    }
+
     html { scroll-behavior: smooth; }
 
     body {
@@ -139,31 +171,15 @@
 
     textarea::placeholder { color: var(--muted); }
 
-    /* ── OPTIONS ── */
-    .options {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-top: 14px;
-    }
+    textarea::-webkit-scrollbar { width: 6px; }
+    textarea::-webkit-scrollbar-track { background: transparent; }
+    textarea::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; border: none; }
+    textarea::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-    .delay-label { font-size: 13px; color: var(--para); }
-
-    select {
-      background: var(--bg);
-      border: 1px solid var(--border2);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: var(--font-sans);
-      font-size: 13px;
-      padding: 6px 10px;
-      outline: none;
-      cursor: pointer;
-      transition: border-color .18s;
-    }
-
-    select:focus { border-color: var(--accent); }
+    .table-wrap::-webkit-scrollbar { height: 6px; }
+    .table-wrap::-webkit-scrollbar-track { background: var(--surface2); border-radius: 0 0 10px 10px; }
+    .table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; border: none; }
+    .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
     /* ── BUTTONS ── */
     .btn-row {
@@ -592,21 +608,30 @@
 
     .btn-cache-clear:hover { color: var(--red-lt); }
 
-    .cache-badge {
+    .cache-badge, .source-badge {
       display: inline-block;
       font-family: var(--font-sans);
       font-size: 10px;
       font-weight: 600;
       letter-spacing: .05em;
       text-transform: uppercase;
-      color: var(--accent);
-      background: rgba(255,137,6,.1);
-      border: 1px solid rgba(255,137,6,.25);
       padding: 1px 6px;
       border-radius: 4px;
       margin-left: 6px;
       vertical-align: middle;
       cursor: default;
+    }
+
+    .cache-badge {
+      color: var(--accent);
+      background: rgba(255,137,6,.1);
+      border: 1px solid rgba(255,137,6,.25);
+    }
+
+    .source-badge.source-whois {
+      color: var(--para);
+      background: rgba(167,169,190,.08);
+      border: 1px solid rgba(167,169,190,.2);
     }
   </style>
 </head>
@@ -635,16 +660,6 @@
       <div class="or-divider"><span>or type manually</span></div>
 
       <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One domain per line. Up to 50 at a time."></textarea>
-
-      <div class="options">
-        <span class="delay-label">Request delay:</span>
-        <select id="delaySelect">
-          <option value="600">600ms (safe)</option>
-          <option value="300">300ms (fast)</option>
-          <option value="1000">1000ms (slow)</option>
-          <option value="1500">1500ms (very slow)</option>
-        </select>
-      </div>
 
       <div class="btn-row">
         <button class="btn btn-primary" id="runBtn" onclick="runCheck()">
@@ -705,9 +720,9 @@
 
     <!-- TABLE -->
     <div id="tableContainer">
-      <div class="empty-state" id="emptyState">
-        <div class="icon">⬛</div>
-        <p>Enter domains above and hit <strong>Check Domains</strong></p>
+      <div class="empty-state">
+        <div class="icon">🔍</div>
+        <p>Enter domains above and click <strong>Check Domains</strong></p>
       </div>
     </div>
 
@@ -717,25 +732,566 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    let results = [];
+    // ─────────────────────────────────────────────────────────────────────────
+    // STATE
+    // ─────────────────────────────────────────────────────────────────────────
+    let results            = [];
     let currentStatusFilter = 'all';
-    let currentEPPFilter    = null; // null = no EPP filter
-    let running = false;
+    let currentEPPFilter   = null;
+    let running            = false;
 
-    // ── FILE IMPORT ────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONSTANTS
+    // ─────────────────────────────────────────────────────────────────────────
+    const MAX_DOMAINS  = 50;
+    const MAX_LABEL    = 63;          // RFC 1035
+    const MAX_FQDN     = 253;         // RFC 1035
+    const CACHE_KEY    = 'bulkwhois_cache';
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+    // Rate limiter: max N requests per window (ms)
+    const RL_MAX      = 5;
+    const RL_WINDOW   = 2000;   // 5 req / 2 s  →  2.5 req/s sustained
+    const RETRY_DELAY = 3000;   // wait 3 s on 429 before retry
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // INPUT VALIDATION & SANITIZATION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Sanitize and validate a single raw domain token.
+     * Returns { ok: true, domain } or { ok: false, reason }.
+     */
+    function sanitizeDomain(raw) {
+      if (typeof raw !== 'string') return { ok: false, reason: 'not a string' };
+
+      // 1. Strip surrounding whitespace, convert to lower-case ASCII
+      let d = raw.trim().toLowerCase();
+
+      // 2. Strip protocol, path, port — accept only the hostname part
+      d = d.replace(/^https?:\/\//i, '')
+           .replace(/^ftp:\/\//i, '')
+           .replace(/\/.*$/, '')       // strip path
+           .replace(/\?.*$/, '')       // strip query
+           .replace(/#.*$/, '')        // strip hash
+           .replace(/:\d+$/, '')       // strip port
+           .replace(/^www\./, '');     // strip leading www.
+
+      // 3. Skip blank lines and comment lines
+      if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
+
+      // 4. Must not exceed RFC max length
+      if (d.length > MAX_FQDN) return { ok: false, reason: `exceeds ${MAX_FQDN} chars` };
+
+      // 5. Must have at least one dot
+      if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
+
+      // 6. Validate each label (RFC 1035 + allow IDN punycode xn--)
+      const labels = d.split('.');
+      for (const label of labels) {
+        if (!label) return { ok: false, reason: 'empty label' };
+        if (label.length > MAX_LABEL) return { ok: false, reason: `label too long: ${label}` };
+        // Allow letters, digits, hyphens; no leading/trailing hyphen
+        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label) && !/^xn--[a-z0-9-]+$/.test(label)) {
+          return { ok: false, reason: `invalid label: ${label}` };
+        }
+      }
+
+      // 7. TLD must be at least 2 chars and all alpha
+      const tld = labels[labels.length - 1];
+      if (!/^[a-z]{2,}$/.test(tld)) return { ok: false, reason: `invalid TLD: ${tld}` };
+
+      // 8. Must have at least a second-level label
+      if (labels.length < 2) return { ok: false, reason: 'missing SLD' };
+
+      return { ok: true, domain: d };
+    }
+
+    /**
+     * Parse raw textarea/file text into validated unique domains.
+     * Returns { valid: string[], skipped: { raw, reason }[] }
+     */
+    function parseAndValidateDomains(text) {
+      const lines = text.split(/\r?\n/).slice(0, MAX_DOMAINS * 4); // guard huge pastes early
+      const valid   = [];
+      const skipped = [];
+      const seen    = new Set();
+
+      for (const line of lines) {
+        const r = sanitizeDomain(line);
+        if (!r.ok) {
+          if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
+          continue;
+        }
+        if (seen.has(r.domain)) continue; // deduplicate
+        seen.add(r.domain);
+        if (valid.length >= MAX_DOMAINS) {
+          skipped.push({ raw: r.domain, reason: `cap of ${MAX_DOMAINS} reached` });
+          continue;
+        }
+        valid.push(r.domain);
+      }
+      return { valid, skipped };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RATE LIMITER  (token-bucket style, browser-side)
+    // ─────────────────────────────────────────────────────────────────────────
+    const rateLimiter = (() => {
+      const timestamps = []; // ring buffer of recent request times
+
+      return {
+        /** Returns a Promise that resolves when it's safe to fire the next request. */
+        async wait() {
+          const now = Date.now();
+          // Drop timestamps older than window
+          while (timestamps.length && now - timestamps[0] >= RL_WINDOW) timestamps.shift();
+
+          if (timestamps.length >= RL_MAX) {
+            // Must wait until the oldest slot expires
+            const waitMs = RL_WINDOW - (now - timestamps[0]) + 10;
+            await sleep(waitMs);
+            // Recurse after waiting (slots may have freed)
+            return this.wait();
+          }
+          timestamps.push(Date.now());
+        },
+
+        /** Call on 429 — back off and drain the bucket */
+        async backoff() {
+          timestamps.length = 0; // reset bucket
+          await sleep(RETRY_DELAY);
+        }
+      };
+    })();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CACHE  (single in-memory object, flushed to localStorage as a batch)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Load once at startup — avoids repeated JSON.parse on every lookup
+    let _cacheStore = (() => {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+      catch { return {}; }
+    })();
+
+    // Debounced flush — coalesces rapid writes into one localStorage.setItem
+    let _cacheFlushTimer = null;
+    function _scheduleCacheFlush() {
+      clearTimeout(_cacheFlushTimer);
+      _cacheFlushTimer = setTimeout(() => {
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore)); } catch {}
+      }, 300);
+    }
+
+    function cacheGet(domain) {
+      const entry = _cacheStore[domain];
+      if (!entry) return null;
+      if (Date.now() - entry.ts > CACHE_TTL_MS) {
+        delete _cacheStore[domain];
+        _scheduleCacheFlush();
+        return null;
+      }
+      return entry.data;
+    }
+
+    function cacheSet(domain, data) {
+      _cacheStore[domain] = { ts: Date.now(), data };
+      _scheduleCacheFlush();
+    }
+
+    function cacheClear() {
+      _cacheStore = {};
+      clearTimeout(_cacheFlushTimer);
+      try { localStorage.removeItem(CACHE_KEY); } catch {}
+      updateCacheInfo();
+      showToast('Cache cleared');
+    }
+
+    function cacheValidCount() {
+      const now = Date.now();
+      return Object.values(_cacheStore).filter(v => now - v.ts <= CACHE_TTL_MS).length;
+    }
+
+    function updateCacheInfo() {
+      const el = document.getElementById('cacheInfo');
+      if (!el) return;
+      const n = cacheValidCount();
+      if (n === 0) { el.textContent = 'Cache empty'; el.style.opacity = '.4'; }
+      else         { el.textContent = `${n} domain${n !== 1 ? 's' : ''} cached`; el.style.opacity = '1'; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RDAP + WHOIS FALLBACK
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Fetch via RDAP (primary). On failure / no-RDAP, try WHOIS JSON fallback.
+     * Returns a normalised result object.
+     */
+    async function checkDomain(domain) {
+      // 1. Cache hit — instant, no network
+      const cached = cacheGet(domain);
+      if (cached) return { ...cached, fromCache: true };
+
+      // 2. Rate-limit gate
+      await rateLimiter.wait();
+
+      // 3. Try RDAP
+      let result = await fetchRDAP(domain);
+
+      // 4. Fallback to WHOIS JSON if RDAP errored (not if domain was simply missing/404)
+      if (result.status === 'error' && result.fallback) {
+        await rateLimiter.wait();
+        result = await fetchWHOISjson(domain);
+      }
+
+      // 5. Cache successful results
+      if (result.status !== 'error') cacheSet(domain, result);
+      return { ...result, fromCache: false };
+    }
+
+    async function fetchRDAP(domain) {
+      try {
+        const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
+
+        if (res.status === 404) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
+        }
+
+        if (res.status === 429) {
+          await rateLimiter.backoff();
+          // Retry once after backoff
+          const retry = await fetch(url, { signal: AbortSignal.timeout(9000) });
+          if (!retry.ok) return { domain, status: 'error', registrar: `Rate limited (${retry.status})`, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
+          const data = await retry.json();
+          return parseRDAPResponse(domain, data);
+        }
+
+        if (!res.ok) {
+          // 5xx or unexpected → try fallback
+          return { domain, status: 'error', registrar: `RDAP ${res.status}`, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
+        }
+
+        const data = await res.json();
+        return parseRDAPResponse(domain, data);
+
+      } catch (e) {
+        const reason = e.name === 'TimeoutError' ? 'RDAP timeout' : `RDAP: ${e.message.slice(0, 40)}`;
+        return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], fallback: true, source: 'RDAP' };
+      }
+    }
+
+    function parseRDAPResponse(domain, data) {
+      return {
+        domain,
+        status:    'registered',
+        registrar: extractRegistrar(data),
+        expiry:    extractExpiry(data),
+        eppCodes:  extractEPP(data),
+        source:    'RDAP',
+      };
+    }
+
+    async function fetchWHOISjson(domain) {
+      try {
+        // whoisjson.com — free, CORS-enabled WHOIS JSON API, no key needed
+        const url = `https://whoisjson.com/api/v1/whois?domain=${encodeURIComponent(domain)}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+
+        if (res.status === 404) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'WHOIS' };
+        }
+
+        if (res.status === 429) {
+          await rateLimiter.backoff();
+          return { domain, status: 'error', registrar: 'Rate limited', expiry: '—', eppCodes: [], source: 'WHOIS' };
+        }
+
+        if (!res.ok) {
+          return { domain, status: 'error', registrar: `WHOIS ${res.status}`, expiry: '—', eppCodes: [], source: 'WHOIS' };
+        }
+
+        const data = await res.json();
+        return parseWHOISjsonResponse(domain, data);
+
+      } catch (e) {
+        const reason = e.name === 'TimeoutError' ? 'WHOIS timeout' : `WHOIS: ${e.message.slice(0, 40)}`;
+        return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], source: 'WHOIS' };
+      }
+    }
+
+    function parseWHOISjsonResponse(domain, d) {
+      // whoisjson.com response shape
+      const registrar = d.registrar?.name || d.registrar || '—';
+      const expiry    = d.expires        || d.expiry_date || d.expiration_date || '—';
+      const rawStatus = d.status         || d.domain_status || [];
+      const eppCodes  = Array.isArray(rawStatus)
+        ? [...new Set(rawStatus.map(s => (typeof s === 'string' ? s.split(' ')[0].trim() : '')).filter(Boolean))]
+        : [];
+      const formattedExpiry = expiry !== '—' ? expiry.slice(0, 10) : '—';
+
+      return {
+        domain,
+        status:    'registered',
+        registrar: typeof registrar === 'string' ? registrar : '—',
+        expiry:    formattedExpiry,
+        eppCodes,
+        source:    'WHOIS',
+      };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXTRACTORS  (RDAP)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function extractRegistrar(data) {
+      if (!Array.isArray(data.entities)) return '—';
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar')) {
+          // vCard fn field
+          if (Array.isArray(e.vcardArray?.[1])) {
+            for (const v of e.vcardArray[1]) {
+              if (v[0] === 'fn' && v[3]) return String(v[3]);
+            }
+          }
+          if (e.handle) return String(e.handle);
+        }
+      }
+      return '—';
+    }
+
+    function extractExpiry(data) {
+      if (!Array.isArray(data.events)) return '—';
+      for (const ev of data.events) {
+        if (ev.eventAction === 'expiration' && ev.eventDate) {
+          try { return new Date(ev.eventDate).toISOString().slice(0, 10); }
+          catch { /* fall through */ }
+        }
+      }
+      return '—';
+    }
+
+    function extractEPP(data) {
+      if (!Array.isArray(data.status)) return [];
+      const codes = data.status
+        .filter(item => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(Boolean);
+      return [...new Set(codes)];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EPP KNOWLEDGE BASE
+    // ─────────────────────────────────────────────────────────────────────────
+    const EPP_META = {
+      'clientHold':               { label: 'clientHold',           tier: 'critical', tip: 'Registrar suspended this domain. DNS is NOT resolving.' },
+      'serverHold':               { label: 'serverHold',           tier: 'critical', tip: 'Registry suspended this domain. DNS is NOT resolving.' },
+      'pendingDelete':            { label: 'pendingDelete',         tier: 'critical', tip: 'Domain is queued for deletion. May be redeemable or about to drop.' },
+      'redemptionPeriod':         { label: 'redemption',           tier: 'critical', tip: 'Expired and in the 30-day redemption period. Restorable at extra cost.' },
+      'pendingRestore':           { label: 'pendingRestore',        tier: 'warn',     tip: 'Registrant requested redemption; process not yet complete.' },
+      'pendingCreate':            { label: 'pendingCreate',         tier: 'warn',     tip: 'Domain creation is in progress.' },
+      'pendingRenew':             { label: 'pendingRenew',          tier: 'warn',     tip: 'A renewal request is being processed.' },
+      'pendingTransfer':          { label: 'pendingTransfer',       tier: 'warn',     tip: 'A transfer to another registrar is in progress.' },
+      'pendingUpdate':            { label: 'pendingUpdate',         tier: 'warn',     tip: 'A domain update is pending registry processing.' },
+      'clientRenewProhibited':    { label: 'renewLock (client)',    tier: 'warn',     tip: 'Registrar blocked renewal. Domain may be at risk of expiry.' },
+      'serverRenewProhibited':    { label: 'renewLock (server)',    tier: 'warn',     tip: 'Registry blocked renewal.' },
+      'autoRenewPeriod':          { label: 'autoRenew',            tier: 'warn',     tip: 'Auto-renewed; within the post-renewal grace period.' },
+      'clientTransferProhibited': { label: 'xferLock (client)',     tier: 'neutral',  tip: 'Registrar transfer lock. Cannot be transferred away.' },
+      'serverTransferProhibited': { label: 'xferLock (server)',     tier: 'neutral',  tip: 'Registry transfer lock. Common on newly registered domains (60-day ICANN lock).' },
+      'addPeriod':                { label: 'addPeriod',             tier: 'neutral',  tip: 'Within the initial grace period after registration.' },
+      'renewPeriod':              { label: 'renewPeriod',           tier: 'neutral',  tip: 'Within the grace period after a manual renewal.' },
+      'transferPeriod':           { label: 'transferPeriod',        tier: 'neutral',  tip: 'Within the grace period after a registrar transfer.' },
+      'clientDeleteProhibited':   { label: 'deleteLock (client)',   tier: 'ok',       tip: 'Registrar delete lock. Protects from accidental deletion.' },
+      'serverDeleteProhibited':   { label: 'deleteLock (server)',   tier: 'ok',       tip: 'Registry delete lock. Strong protection against deletion.' },
+      'clientUpdateProhibited':   { label: 'updateLock (client)',   tier: 'ok',       tip: 'Registrar update lock. Domain details cannot be modified.' },
+      'serverUpdateProhibited':   { label: 'updateLock (server)',   tier: 'ok',       tip: 'Registry update lock. Domain details cannot be modified.' },
+      'ok':                       { label: 'ok',                    tier: 'ok',       tip: 'Domain is active with no restrictions.' },
+      'active':                   { label: 'active',                tier: 'ok',       tip: 'Domain is active.' },
+      'linked':                   { label: 'linked',                tier: 'ok',       tip: 'Domain has associated nameserver objects.' },
+    };
+
+    function getEPPMeta(code) {
+      return EPP_META[code.toLowerCase().trim()] || { label: code, tier: 'neutral', tip: null };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RENDERING  — batched DOM writes, stats in single pass
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Cached DOM refs — avoids repeated getElementById in hot path
+    const $ = id => document.getElementById(id);
+
+    function updateStats() {
+      // Single pass — O(n) not O(3n)
+      let reg = 0, avail = 0, err = 0;
+      for (const r of results) {
+        if (r.status === 'registered') reg++;
+        else if (r.status === 'available') avail++;
+        else if (r.status === 'error') err++;
+      }
+      $('statTotal').textContent = results.length;
+      $('statReg').textContent   = reg;
+      $('statAvail').textContent = avail;
+      $('statErr').textContent   = err;
+    }
+
+    function updateProgress(done, total, current) {
+      $('progressBar').style.width    = total ? `${Math.round(done / total * 100)}%` : '0%';
+      $('progressCount').textContent  = `${done} / ${total}`;
+      $('progressLabel').textContent  = current ? `Checking ${current}…` : 'Checking…';
+    }
+
+    // Pre-compute EPP filter set once per row — avoids repeated .map().includes()
+    function buildEPPSet(eppCodes) {
+      return new Set((eppCodes || []).map(c => c.toLowerCase()));
+    }
+
+    function renderTable() {
+      if (results.length === 0) {
+        $('tableContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <p>Enter domains above and click <strong>Check Domains</strong></p>
+          </div>`;
+        return;
+      }
+
+      const eppFilterLower = currentEPPFilter ? currentEPPFilter.toLowerCase() : null;
+      const parts = [];
+
+      for (const r of results) {
+        // Status filter
+        if (currentStatusFilter !== 'all' && r.status !== currentStatusFilter) continue;
+        // EPP filter — use pre-built Set for O(1) lookup
+        if (eppFilterLower && !buildEPPSet(r.eppCodes).has(eppFilterLower)) continue;
+
+        const domainCell = r.status === 'registered'
+          ? `<a href="https://who.is/whois/${r.domain}" target="_blank" rel="noopener">${r.domain}</a>`
+          : r.domain;
+
+        const sourceTag = r.source && r.source !== 'RDAP'
+          ? `<span class="source-badge source-${r.source.toLowerCase()}" title="Data via ${r.source}">${r.source}</span>`
+          : '';
+
+        const cacheTag = r.fromCache
+          ? `<span class="cache-badge" title="Loaded from local cache (24 h TTL)">cached</span>`
+          : '';
+
+        parts.push(`<tr>
+          <td class="domain-cell">${domainCell}${sourceTag}${cacheTag}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td>${renderEPPTags(r.eppCodes)}</td>
+          <td class="registrar-cell">${escHtml(r.registrar)}</td>
+          <td class="expiry-cell">${expiryCell(r.expiry)}</td>
+        </tr>`);
+      }
+
+      const tbody = parts.length
+        ? parts.join('')
+        : `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
+
+      // Single innerHTML write per render cycle
+      $('tableContainer').innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th>
+            </tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderEPPTags(codes) {
+      if (!codes?.length) return '<span style="color:var(--muted);font-size:12px">—</span>';
+      return `<div class="epp-wrap">${codes.map(code => {
+        const m = getEPPMeta(code);
+        const tip = m.tip ? ` data-tip="${escAttr(m.tip)}"` : '';
+        return `<span class="epp-tag epp-${m.tier}"${tip}>${escHtml(m.label)}</span>`;
+      }).join('')}</div>`;
+    }
+
+    function statusBadge(status) {
+      const map = {
+        registered: `<span class="status-badge status-registered"><span class="dot dot-red"></span>Registered</span>`,
+        available:  `<span class="status-badge status-available"><span class="dot dot-green"></span>Available</span>`,
+        error:      `<span class="status-badge status-error"><span class="dot dot-yellow"></span>Error</span>`,
+        pending:    `<span class="status-badge status-pending"><span class="spinner"></span>Checking…</span>`,
+      };
+      return map[status] || escHtml(status);
+    }
+
+    function expiryCell(expiry) {
+      if (!expiry || expiry === '—') return '<span style="color:var(--muted)">—</span>';
+      try {
+        const daysLeft = Math.floor((new Date(expiry) - Date.now()) / 86400000);
+        return daysLeft < 60
+          ? `<span class="expiry-soon">${expiry} ⚠</span>`
+          : `<span class="expiry-old">${expiry}</span>`;
+      } catch { return escHtml(expiry); }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FILTERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function setStatusFilter(f, btn) {
+      currentStatusFilter = f;
+      document.querySelectorAll('#statusFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+      btn?.classList.add('active');
+      renderTable();
+    }
+
+    function setEPPFilter(code, btn) {
+      if (currentEPPFilter === code) {
+        currentEPPFilter = null;
+        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+      } else {
+        currentEPPFilter = code;
+        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+        btn?.classList.add('active');
+      }
+      renderTable();
+    }
+
+    function updateEPPFilterBar() {
+      const seen = new Map();
+      for (const r of results) {
+        for (const code of (r.eppCodes || [])) {
+          if (!seen.has(code)) seen.set(code, getEPPMeta(code));
+        }
+      }
+
+      if (!seen.size) { $('eppFilterGroup').style.display = 'none'; return; }
+
+      const tierOrder = { critical: 0, warn: 1, ok: 2, neutral: 3 };
+      const sorted = [...seen.entries()].sort((a, b) => {
+        const td = tierOrder[a[1].tier] - tierOrder[b[1].tier];
+        return td || a[0].localeCompare(b[0]);
+      });
+
+      // Count per code in one pass
+      const counts = {};
+      for (const r of results) {
+        for (const code of (r.eppCodes || [])) counts[code] = (counts[code] || 0) + 1;
+      }
+
+      $('eppFilterBar').innerHTML = sorted.map(([code, meta]) =>
+        `<button class="filter-btn epp-f-${meta.tier}" onclick="setEPPFilter('${escAttr(code)}', this)">${escHtml(meta.label)} <span style="opacity:.6">(${counts[code] || 0})</span></button>`
+      ).join('');
+
+      $('eppFilterGroup').style.display = 'flex';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FILE IMPORT
+    // ─────────────────────────────────────────────────────────────────────────
 
     function initDropZone() {
-      const zone = document.getElementById('dropZone');
-
-      zone.addEventListener('dragover', e => {
-        e.preventDefault();
-        zone.classList.add('drag-over');
-      });
-
-      zone.addEventListener('dragleave', e => {
-        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
-      });
-
+      const zone = $('dropZone');
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
       zone.addEventListener('drop', e => {
         e.preventDefault();
         zone.classList.remove('drag-over');
@@ -747,77 +1303,56 @@
     function handleFileInput(e) {
       const file = e.target.files[0];
       if (file) processFile(file);
-      e.target.value = ''; // reset so same file can be re-selected
+      e.target.value = '';
     }
 
     function processFile(file) {
       const ext = file.name.split('.').pop().toLowerCase();
-      if (!['txt', 'csv'].includes(ext)) {
-        showToast('⚠ Only .txt and .csv files are supported');
-        return;
-      }
+      if (!['txt', 'csv'].includes(ext)) { showToast('⚠ Only .txt and .csv files are supported'); return; }
+      if (file.size > 500_000) { showToast('⚠ File too large (max 500 KB)'); return; }
 
       const reader = new FileReader();
       reader.onload = e => {
         const text = e.target.result;
-        const domains = ext === 'csv' ? parseCSVDomains(text) : parseTXTDomains(text);
+        const raw  = ext === 'csv' ? extractCSVDomains(text) : text;
+        const { valid, skipped } = parseAndValidateDomains(raw);
 
-        if (!domains.length) {
-          showToast('⚠ No valid domains found in file');
-          return;
-        }
+        if (!valid.length) { showToast('⚠ No valid domains found in file'); return; }
 
-        // Append to textarea (or replace if empty)
-        const ta = document.getElementById('domainInput');
+        const ta = $('domainInput');
         const existing = ta.value.trim();
-        ta.value = existing ? existing + '\n' + domains.join('\n') : domains.join('\n');
+        ta.value = existing ? `${existing}\n${valid.join('\n')}` : valid.join('\n');
 
-        // Visual feedback on drop zone
-        const zone = document.getElementById('dropZone');
+        const zone = $('dropZone');
         zone.classList.add('loaded');
         zone.querySelector('.drop-text').innerHTML =
-          `<strong>${file.name}</strong> — ${domains.length} domain${domains.length > 1 ? 's' : ''} loaded`;
+          `<strong>${escHtml(file.name)}</strong> — ${valid.length} domain${valid.length > 1 ? 's' : ''} loaded` +
+          (skipped.length ? ` <span style="color:var(--yellow)">(${skipped.length} skipped)</span>` : '');
         zone.querySelector('.drop-hint').textContent = 'Click or drop another file to add more';
 
-        showToast(`✓ ${domains.length} domain${domains.length > 1 ? 's' : ''} imported from ${file.name}`);
+        showToast(`✓ ${valid.length} imported${skipped.length ? `, ${skipped.length} skipped` : ''}`);
       };
       reader.readAsText(file);
     }
 
-    function parseTXTDomains(text) {
-      return text.split(/\r?\n/)
-        .map(l => l.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, ''))
-        .filter(l => l && l.includes('.') && !l.startsWith('#'));
-    }
-
-    function parseCSVDomains(text) {
+    /** Extract text from CSV — detects which column holds domains */
+    function extractCSVDomains(text) {
       const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (!lines.length) return [];
-
-      // Detect which column contains domains by scanning the first 5 rows
-      const rows = lines.map(l => splitCSVLine(l));
+      if (!lines.length) return '';
+      const rows = lines.map(splitCSVLine);
       const numCols = Math.max(...rows.map(r => r.length));
-      let domainCol = 0;
-
-      // Score each column: count how many values look like domains
-      let bestScore = 0;
+      let bestCol = 0, bestScore = 0;
       for (let c = 0; c < numCols; c++) {
         const score = rows.slice(0, 10).filter(r => r[c] && looksLikeDomain(r[c])).length;
-        if (score > bestScore) { bestScore = score; domainCol = c; }
+        if (score > bestScore) { bestScore = score; bestCol = c; }
       }
-
-      return rows
-        .map(r => (r[domainCol] || '').trim().toLowerCase()
-          .replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, ''))
-        .filter(d => looksLikeDomain(d));
+      return rows.map(r => (r[bestCol] || '').trim()).join('\n');
     }
 
     function splitCSVLine(line) {
-      // Simple CSV split respecting quoted fields
       const result = [];
       let cur = '', inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
+      for (const ch of line) {
         if (ch === '"') { inQ = !inQ; continue; }
         if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
         cur += ch;
@@ -827,474 +1362,149 @@
     }
 
     function looksLikeDomain(s) {
-      return /^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]?\.[a-z]{2,}$/i.test(s.trim());
+      return /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?\.[a-z]{2,}$/i.test(s.trim());
     }
 
-    // Init on load
-    document.addEventListener('DOMContentLoaded', () => {
-      initDropZone();
-      updateCacheInfo();
-    });
+    // ─────────────────────────────────────────────────────────────────────────
+    // MAIN RUN
+    // ─────────────────────────────────────────────────────────────────────────
 
     async function runCheck() {
       if (running) return;
-      const raw = document.getElementById('domainInput').value.trim();
-      if (!raw) return showToast('⚠ Paste at least one domain first');
+      const rawText = $('domainInput').value;
+      if (!rawText.trim()) return showToast('⚠ Paste at least one domain first');
 
-      const domains = raw.split('\n')
-        .map(d => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, ''))
-        .filter(d => d && d.includes('.'));
+      const { valid, skipped } = parseAndValidateDomains(rawText);
 
-      const unique = [...new Set(domains)].slice(0, 50);
-      if (unique.length === 0) return showToast('⚠ No valid domains found');
-      if (domains.length > 50) showToast('ℹ Capped at 50 domains');
+      if (!valid.length) {
+        showToast(skipped.length
+          ? `⚠ No valid domains — ${skipped[0].reason}`
+          : '⚠ No valid domains found');
+        return;
+      }
+
+      if (skipped.length) showToast(`ℹ ${skipped.length} line${skipped.length > 1 ? 's' : ''} skipped (invalid)`);
 
       running = true;
-      results = [];
-      currentFilter = 'all';
-      const delay = parseInt(document.getElementById('delaySelect').value);
-
-      document.getElementById('runBtn').disabled = true;
-      document.getElementById('exportBtn').disabled = true;
-      document.getElementById('progressWrap').style.display = 'block';
-      document.getElementById('statsRow').style.display = 'flex';
-      document.getElementById('filterSection').style.display = 'flex';
+      results = valid.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', eppCodes: [] }));
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
 
+      $('runBtn').disabled    = true;
+      $('exportBtn').disabled = true;
+      $('progressWrap').style.display   = 'block';
+      $('statsRow').style.display       = 'flex';
+      $('filterSection').style.display  = 'flex';
+
+      renderTable();
       updateStats();
-      renderTable();
 
-      // seed table with pending rows
-      results = unique.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', eppCodes: [], raw: null }));
-      renderTable();
-
-      for (let i = 0; i < unique.length; i++) {
-        const domain = unique[i];
-        updateProgress(i, unique.length, domain);
-        const res = await checkDomain(domain);
-        results[i] = res;
-        updateStats();
-        renderTable();
-        // Only delay for live API calls, not cache hits
-        if (!res.fromCache && i < unique.length - 1) await sleep(delay);
+      for (let i = 0; i < valid.length; i++) {
+        updateProgress(i, valid.length, valid[i]);
+        results[i] = await checkDomain(valid[i]);
+        // Micro-batch: only re-render every 3 rows to reduce DOM thrash
+        if (i % 3 === 0 || i === valid.length - 1) {
+          renderTable();
+          updateStats();
+        }
       }
 
-      const cached = results.filter(r => r.fromCache).length;
-      const live   = unique.length - cached;
-
-      updateProgress(unique.length, unique.length, '');
-      document.getElementById('progressLabel').textContent = 'Done ✓';
-      document.getElementById('runBtn').disabled = false;
-      document.getElementById('exportBtn').disabled = false;
+      updateProgress(valid.length, valid.length, '');
+      $('progressLabel').textContent = 'Done ✓';
+      $('runBtn').disabled    = false;
+      $('exportBtn').disabled = false;
+      renderTable();
+      updateStats();
       updateEPPFilterBar();
       updateCacheInfo();
       running = false;
-      const summary = cached > 0
-        ? `✓ ${live} fetched, ${cached} from cache`
-        : `✓ Checked ${unique.length} domain${unique.length > 1 ? 's' : ''}`;
-      showToast(summary);
+
+      const cachedCount = results.filter(r => r.fromCache).length;
+      const liveCount   = valid.length - cachedCount;
+      showToast(cachedCount > 0
+        ? `✓ ${liveCount} fetched, ${cachedCount} from cache`
+        : `✓ Checked ${valid.length} domain${valid.length > 1 ? 's' : ''}`);
     }
 
-    // ── EPP STATUS KNOWLEDGE BASE ──────────────────────────────────────────────
-    // Maps RDAP/EPP status codes → { label, tier, tip }
-    // tier: 'critical' | 'warn' | 'ok' | 'neutral'
-    const EPP_META = {
-      // ── Hold / Suspension ──
-      'clientHold':                { label: 'clientHold',       tier: 'critical', tip: 'Registrar suspended this domain. DNS is NOT resolving.' },
-      'serverHold':                { label: 'serverHold',       tier: 'critical', tip: 'Registry suspended this domain. DNS is NOT resolving.' },
-      // ── Pending states ──
-      'pendingDelete':             { label: 'pendingDelete',    tier: 'critical', tip: 'Domain is queued for deletion. May be redeemable or about to drop.' },
-      'pendingRestore':            { label: 'pendingRestore',   tier: 'warn',     tip: 'Registrant has requested redemption but process is not yet complete.' },
-      'pendingCreate':             { label: 'pendingCreate',    tier: 'warn',     tip: 'Domain creation is in progress.' },
-      'pendingRenew':              { label: 'pendingRenew',     tier: 'warn',     tip: 'A renewal request is being processed.' },
-      'pendingTransfer':           { label: 'pendingTransfer',  tier: 'warn',     tip: 'A transfer to another registrar is in progress.' },
-      'pendingUpdate':             { label: 'pendingUpdate',    tier: 'warn',     tip: 'A domain update is pending registry processing.' },
-      // ── Transfer locks ──
-      'clientTransferProhibited':  { label: 'xferLock (client)',tier: 'neutral',  tip: 'Registrar-level transfer lock. Domain cannot be transferred away.' },
-      'serverTransferProhibited':  { label: 'xferLock (server)',tier: 'neutral',  tip: 'Registry-level transfer lock. Common on newly registered domains (60-day ICANN lock).' },
-      // ── Delete locks ──
-      'clientDeleteProhibited':    { label: 'deleteLock (client)', tier: 'ok',    tip: 'Registrar-set delete lock. Protects domain from accidental deletion.' },
-      'serverDeleteProhibited':    { label: 'deleteLock (server)', tier: 'ok',    tip: 'Registry-set delete lock. Strong protection against deletion.' },
-      // ── Update locks ──
-      'clientUpdateProhibited':    { label: 'updateLock (client)', tier: 'ok',    tip: 'Registrar-set update lock. Domain details cannot be modified.' },
-      'serverUpdateProhibited':    { label: 'updateLock (server)', tier: 'ok',    tip: 'Registry-set update lock. Domain details cannot be modified at registry level.' },
-      // ── Renew lock ──
-      'clientRenewProhibited':     { label: 'renewLock (client)', tier: 'warn',   tip: 'Registrar has blocked renewal. Domain may be at risk of expiry.' },
-      'serverRenewProhibited':     { label: 'renewLock (server)', tier: 'warn',   tip: 'Registry has blocked renewal.' },
-      // ── Good standing ──
-      'ok':                        { label: 'ok',                tier: 'ok',      tip: 'Domain is active with no restrictions.' },
-      'active':                    { label: 'active',            tier: 'ok',      tip: 'Domain is active.' },
-      'linked':                    { label: 'linked',            tier: 'ok',      tip: 'Domain has associated nameserver objects.' },
-      // ── Redemption ──
-      'redemptionPeriod':          { label: 'redemption',        tier: 'critical',tip: 'Domain has expired and entered the redemption grace period (typically 30 days). Can be restored at extra cost.' },
-      'autoRenewPeriod':           { label: 'autoRenew',         tier: 'warn',    tip: 'Domain was auto-renewed; within the post-renewal grace period.' },
-      'addPeriod':                 { label: 'addPeriod',         tier: 'neutral',  tip: 'Within the initial grace period after registration.' },
-      'renewPeriod':               { label: 'renewPeriod',       tier: 'neutral',  tip: 'Within the grace period after a manual renewal.' },
-      'transferPeriod':            { label: 'transferPeriod',    tier: 'neutral',  tip: 'Within the grace period after a registrar transfer.' },
-    };
-
-    function getEPPMeta(code) {
-      const key = code.toLowerCase().trim();
-      return EPP_META[key] || { label: code, tier: 'neutral', tip: null };
-    }
-
-    // ── CACHE ──────────────────────────────────────────────────────────────────
-    const CACHE_KEY = 'bulkwhois_cache';
-    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
-
-    function cacheLoad() {
-      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
-      catch { return {}; }
-    }
-
-    function cacheSave(store) {
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(store)); } catch {}
-    }
-
-    function cacheGet(domain) {
-      const store = cacheLoad();
-      const entry = store[domain];
-      if (!entry) return null;
-      if (Date.now() - entry.ts > CACHE_TTL) {
-        // expired — remove it
-        delete store[domain];
-        cacheSave(store);
-        return null;
-      }
-      return entry.data;
-    }
-
-    function cacheSet(domain, data) {
-      const store = cacheLoad();
-      store[domain] = { ts: Date.now(), data };
-      cacheSave(store);
-    }
-
-    function cacheClear() {
-      localStorage.removeItem(CACHE_KEY);
-      updateCacheInfo();
-      showToast('Cache cleared');
-    }
-
-    function cacheStats() {
-      const store = cacheLoad();
-      const now = Date.now();
-      const entries = Object.entries(store);
-      const valid   = entries.filter(([, v]) => now - v.ts <= CACHE_TTL);
-      return { total: entries.length, valid: valid.length };
-    }
-
-    function updateCacheInfo() {
-      const el = document.getElementById('cacheInfo');
-      if (!el) return;
-      const { valid } = cacheStats();
-      if (valid === 0) {
-        el.textContent = 'Cache empty';
-        el.style.opacity = '.4';
-      } else {
-        el.textContent = `${valid} domain${valid !== 1 ? 's' : ''} cached`;
-        el.style.opacity = '1';
-      }
-    }
-
-    async function checkDomain(domain) {
-      // Check cache first
-      const cached = cacheGet(domain);
-      if (cached) return { ...cached, fromCache: true };
-
-      try {
-        const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-
-        let result;
-        if (res.status === 404) {
-          result = { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [] };
-        } else if (!res.ok) {
-          result = { domain, status: 'error', registrar: `HTTP ${res.status}`, expiry: '—', eppCodes: [] };
-        } else {
-          const data = await res.json();
-          result = {
-            domain,
-            status:    'registered',
-            registrar: extractRegistrar(data),
-            expiry:    extractExpiry(data),
-            eppCodes:  extractEPP(data),
-          };
-        }
-
-        // Only cache non-error results
-        if (result.status !== 'error') cacheSet(domain, result);
-        return { ...result, raw: null, fromCache: false };
-
-      } catch (e) {
-        if (e.name === 'TimeoutError') {
-          return { domain, status: 'error', registrar: 'Timeout', expiry: '—', eppCodes: [], fromCache: false };
-        }
-        return { domain, status: 'error', registrar: e.message.slice(0, 40), expiry: '—', eppCodes: [], fromCache: false };
-      }
-    }
-
-    function extractRegistrar(data) {
-      if (!data.entities) return '—';
-      for (const e of data.entities) {
-        const roles = e.roles || [];
-        if (roles.includes('registrar')) {
-          if (e.vcardArray) {
-            const vcard = e.vcardArray[1] || [];
-            for (const v of vcard) {
-              if (v[0] === 'fn') return v[3] || '—';
-            }
-          }
-          return e.handle || '—';
-        }
-      }
-      return '—';
-    }
-
-    function extractExpiry(data) {
-      const events = data.events || [];
-      for (const ev of events) {
-        if (ev.eventAction === 'expiration') {
-          try {
-            const d = new Date(ev.eventDate);
-            return d.toISOString().split('T')[0];
-          } catch { return '—'; }
-        }
-      }
-      return '—';
-    }
-
-    function extractEPP(data) {
-      // RDAP stores status as array of strings, possibly with URL pairs
-      const raw = data.status || [];
-      const codes = [];
-      for (const item of raw) {
-        if (typeof item === 'string') {
-          // strip leading/trailing whitespace, normalise
-          const code = item.trim();
-          if (code) codes.push(code);
-        }
-      }
-      // deduplicate preserving order
-      return [...new Set(codes)];
-    }
-
-    function renderEPPTags(codes) {
-      if (!codes || codes.length === 0) return '<span style="color:var(--muted);font-size:12px">—</span>';
-      const tags = codes.map(code => {
-        const meta = getEPPMeta(code);
-        const tipAttr = meta.tip ? ` data-tip="${escAttr(meta.tip)}"` : '';
-        return `<span class="epp-tag epp-${meta.tier}"${tipAttr}>${escHtml(meta.label)}</span>`;
-      }).join('');
-      return `<div class="epp-wrap">${tags}</div>`;
-    }
-
-    function renderTable() {
-      const filtered = results.filter(r => {
-        // status filter
-        if (currentStatusFilter !== 'all') {
-          if (currentStatusFilter === 'registered' && r.status !== 'registered') return false;
-          if (currentStatusFilter === 'available'  && r.status !== 'available')  return false;
-          if (currentStatusFilter === 'error'      && r.status !== 'error')      return false;
-        }
-        // EPP filter
-        if (currentEPPFilter) {
-          const codes = (r.eppCodes || []).map(c => c.toLowerCase());
-          if (!codes.includes(currentEPPFilter.toLowerCase())) return false;
-        }
-        return true;
-      });
-
-      if (results.length === 0) {
-        document.getElementById('tableContainer').innerHTML = `
-          <div class="empty-state" id="emptyState">
-            <div class="icon">🔍</div>
-            <p>Enter domains above and click <strong>Check Domains</strong></p>
-          </div>`;
-        return;
-      }
-
-      let rows = '';
-      for (const r of filtered) {
-        rows += `
-          <tr>
-            <td class="domain-cell">
-              ${r.status === 'registered'
-                ? `<a href="https://who.is/whois/${r.domain}" target="_blank" rel="noopener">${r.domain}</a>`
-                : r.domain}
-              ${r.fromCache ? `<span class="cache-badge" title="Result loaded from local cache">cached</span>` : ''}
-            </td>
-            <td>${statusBadge(r.status)}</td>
-            <td>${renderEPPTags(r.eppCodes)}</td>
-            <td class="registrar-cell">${escHtml(r.registrar)}</td>
-            <td class="expiry-cell">${expiryCell(r.expiry)}</td>
-          </tr>`;
-      }
-
-      document.getElementById('tableContainer').innerHTML = `
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Avail.</th>
-                <th>EPP Flags</th>
-                <th>Registrar</th>
-                <th>Expiry</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    }
-
-    function statusBadge(status) {
-      const map = {
-        registered: `<span class="status-badge status-registered"><span class="dot dot-red"></span>Registered</span>`,
-        available:  `<span class="status-badge status-available"><span class="dot dot-green"></span>Available</span>`,
-        error:      `<span class="status-badge status-error"><span class="dot dot-yellow"></span>Error</span>`,
-        pending:    `<span class="status-badge status-pending"><span class="spinner"></span>Checking…</span>`,
-      };
-      return map[status] || status;
-    }
-
-    function expiryCell(expiry) {
-      if (!expiry || expiry === '—') return '<span style="color:var(--muted)">—</span>';
-      try {
-        const d = new Date(expiry);
-        const now = new Date();
-        const daysLeft = Math.floor((d - now) / 86400000);
-        if (daysLeft < 60)  return `<span class="expiry-soon">${expiry} ⚠</span>`;
-        return `<span class="expiry-old">${expiry}</span>`;
-      } catch { return expiry; }
-    }
-
-    function updateStats() {
-      const reg   = results.filter(r => r.status === 'registered').length;
-      const avail = results.filter(r => r.status === 'available').length;
-      const err   = results.filter(r => r.status === 'error').length;
-      document.getElementById('statTotal').textContent = results.length;
-      document.getElementById('statReg').textContent   = reg;
-      document.getElementById('statAvail').textContent = avail;
-      document.getElementById('statErr').textContent   = err;
-    }
-
-    function updateProgress(done, total, current) {
-      const pct = total ? Math.round((done / total) * 100) : 0;
-      document.getElementById('progressBar').style.width = pct + '%';
-      document.getElementById('progressCount').textContent = `${done} / ${total}`;
-      document.getElementById('progressLabel').textContent = current ? `Checking ${current}…` : 'Checking…';
-    }
-
-    function setStatusFilter(f, btn) {
-      currentStatusFilter = f;
-      document.querySelectorAll('#statusFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
-      if (btn) btn.classList.add('active');
-      renderTable();
-    }
-
-    function setEPPFilter(code, btn) {
-      if (currentEPPFilter === code) {
-        // toggle off
-        currentEPPFilter = null;
-        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
-      } else {
-        currentEPPFilter = code;
-        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
-        if (btn) btn.classList.add('active');
-      }
-      renderTable();
-    }
-
-    function updateEPPFilterBar() {
-      // Collect all unique EPP codes seen in results
-      const seen = new Map(); // code → meta
-      for (const r of results) {
-        for (const code of (r.eppCodes || [])) {
-          if (!seen.has(code)) seen.set(code, getEPPMeta(code));
-        }
-      }
-
-      if (seen.size === 0) {
-        document.getElementById('eppFilterGroup').style.display = 'none';
-        return;
-      }
-
-      // Sort: critical first, then warn, ok, neutral; alpha within tier
-      const tierOrder = { critical: 0, warn: 1, ok: 2, neutral: 3 };
-      const sorted = [...seen.entries()].sort((a, b) => {
-        const td = tierOrder[a[1].tier] - tierOrder[b[1].tier];
-        return td !== 0 ? td : a[0].localeCompare(b[0]);
-      });
-
-      const bar = document.getElementById('eppFilterBar');
-      bar.innerHTML = sorted.map(([code, meta]) => {
-        const count = results.filter(r => (r.eppCodes||[]).includes(code)).length;
-        return `<button class="filter-btn epp-f-${meta.tier}" onclick="setEPPFilter('${escAttr(code)}', this)">${escHtml(meta.label)} <span style="opacity:.6">(${count})</span></button>`;
-      }).join('');
-
-      document.getElementById('eppFilterGroup').style.display = 'flex';
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXPORT
+    // ─────────────────────────────────────────────────────────────────────────
 
     function exportCSV() {
       if (!results.length) return;
-      const header = 'Domain,Availability,EPP Flags,Registrar,Expiry';
-      const rows = results.map(r =>
-        `"${r.domain}","${r.status}","${(r.eppCodes||[]).join(' | ')}","${r.registrar}","${r.expiry}"`
-      );
-      const csv = [header, ...rows].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `whois-bulk-${new Date().toISOString().split('T')[0]}.csv`;
+      const rows = ['Domain,Availability,EPP Flags,Registrar,Expiry,Source,Cached',
+        ...results.map(r =>
+          `"${r.domain}","${r.status}","${(r.eppCodes||[]).join(' | ')}","${r.registrar}","${r.expiry}","${r.source||''}","${r.fromCache?'yes':'no'}"`)
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), {
+        href: url,
+        download: `bulkwhois-${new Date().toISOString().slice(0,10)}.csv`
+      });
       a.click();
       URL.revokeObjectURL(url);
       showToast('✓ CSV exported');
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // CLEAR
+    // ─────────────────────────────────────────────────────────────────────────
+
     function clearAll() {
       if (running) return;
-      document.getElementById('domainInput').value = '';
+      $('domainInput').value = '';
       results = [];
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
-      document.getElementById('progressWrap').style.display = 'none';
-      document.getElementById('statsRow').style.display = 'none';
-      document.getElementById('filterSection').style.display = 'none';
-      document.getElementById('eppFilterGroup').style.display = 'none';
-      document.getElementById('exportBtn').disabled = true;
-      // reset drop zone
-      const zone = document.getElementById('dropZone');
+      $('progressWrap').style.display  = 'none';
+      $('statsRow').style.display      = 'none';
+      $('filterSection').style.display = 'none';
+      $('eppFilterGroup').style.display = 'none';
+      $('exportBtn').disabled = true;
+      const zone = $('dropZone');
       zone.classList.remove('loaded');
       zone.querySelector('.drop-text').innerHTML = `Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span>`;
       zone.querySelector('.drop-hint').textContent = 'One domain per line · CSV column auto-detected';
-      document.getElementById('tableContainer').innerHTML = `
-        <div class="empty-state" id="emptyState">
+      $('tableContainer').innerHTML = `
+        <div class="empty-state">
           <div class="icon">🔍</div>
           <p>Enter domains above and click <strong>Check Domains</strong></p>
         </div>`;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // UTILITIES
+    // ─────────────────────────────────────────────────────────────────────────
+
     function showToast(msg) {
-      const t = document.getElementById('toast');
+      const t = $('toast');
       t.textContent = msg;
       t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 2800);
+      setTimeout(() => t.classList.remove('show'), 3000);
     }
 
     function escHtml(s) {
       return String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function escAttr(s) {
-      return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // INIT
+    // ─────────────────────────────────────────────────────────────────────────
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initDropZone();
+      updateCacheInfo();
+    });
   </script>
+
 </body>
 </html>
