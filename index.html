@@ -633,6 +633,165 @@
       background: rgba(167,169,190,.08);
       border: 1px solid rgba(167,169,190,.2);
     }
+
+    /* ── INFO TOGGLE BUTTON ── */
+    .info-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 5px 11px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    .info-toggle:hover,
+    .info-toggle.active {
+      color: var(--accent);
+      border-color: rgba(255,137,6,.35);
+      background: rgba(255,137,6,.06);
+    }
+
+    /* ── INFO PANEL ── */
+    .info-panel {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height .35s ease, opacity .25s ease;
+      pointer-events: none;
+    }
+
+    .info-panel.open {
+      max-height: 1000px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .info-section {
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .info-section:nth-child(2n) { border-right: none; }
+    .info-section:nth-last-child(-n+2) { border-bottom: none; }
+
+    .info-section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .info-section-title svg { flex-shrink: 0; opacity: .7; }
+
+    .info-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .info-list-ol { counter-reset: info-counter; }
+
+    .info-list-ol li {
+      counter-increment: info-counter;
+      padding-left: 20px;
+      position: relative;
+    }
+
+    .info-list-ol li::before {
+      content: counter(info-counter);
+      position: absolute;
+      left: 0;
+      top: 1px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .info-list li { font-size: 12px; color: var(--para); line-height: 1.5; }
+
+    .info-list li code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    .info-list strong { color: var(--text); font-weight: 600; }
+
+    .info-pill {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-right: 4px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .pill-green  { background: rgba(61,164,77,.12);  color: var(--green-lt); border: 1px solid rgba(61,164,77,.25); }
+    .pill-red    { background: rgba(229,49,112,.12); color: var(--red-lt);   border: 1px solid rgba(229,49,112,.25); }
+    .pill-yellow { background: rgba(246,166,35,.12); color: var(--yellow);   border: 1px solid rgba(246,166,35,.25); }
+    .pill-orange { background: rgba(255,137,6,.1);   color: var(--accent);   border: 1px solid rgba(255,137,6,.25); }
+
+    /* ── FOOTER ── */
+    footer { margin-top: 44px; padding-bottom: 8px; }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .footer-inner strong { color: var(--para); }
+    .footer-inner a { color: var(--muted); text-decoration: none; }
+    .footer-inner a:hover { color: var(--accent); }
+    .footer-sep { opacity: .3; }
+
+    @media (max-width: 640px) {
+      .info-grid { grid-template-columns: 1fr; }
+      .info-section { border-right: none !important; }
+      .info-section:last-child { border-bottom: none; }
+      .info-section:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+      .info-section:last-child { border-bottom: none !important; }
+      th:nth-child(4), td:nth-child(4),
+      th:nth-child(5), td:nth-child(5) { display: none; }
+      .btn-export { margin-left: 0; }
+      .filter-section { gap: 14px; }
+      .footer-inner { flex-direction: column; gap: 4px; }
+    }
   </style>
 </head>
 <body>
@@ -641,8 +800,73 @@
     <header>
       <span class="logo">Bulk<span>WHOIS</span></span>
       <span class="badge">v1.0</span>
+      <button class="info-toggle" id="infoToggle" onclick="toggleInfo()" title="How to use">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        How to use
+      </button>
     </header>
-    <p class="tagline">Check domain registration status and EPP flags in bulk</p>
+    <p class="tagline">Check domain registration status and EPP flags in bulk — up to 50 domains at once</p>
+
+    <!-- INFO PANEL -->
+    <div class="info-panel" id="infoPanel">
+      <div class="info-grid">
+
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Getting Started
+          </div>
+          <ol class="info-list info-list-ol">
+            <li>Paste domains in the text area — one per line, or space/comma separated</li>
+            <li>Or drag &amp; drop a <code>.txt</code> or <code>.csv</code> file (domain column is auto-detected)</li>
+            <li>Click <strong>Check Domains</strong> — results appear as each lookup completes</li>
+            <li>Filter by status or EPP flag, then <strong>Export CSV</strong> if needed</li>
+          </ol>
+        </div>
+
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            Results Explained
+          </div>
+          <ul class="info-list">
+            <li><span class="info-pill pill-green">Available</span> Domain returned no RDAP record (404) — likely unregistered</li>
+            <li><span class="info-pill pill-red">Registered</span> Domain has an active RDAP record with registration data</li>
+            <li><span class="info-pill pill-yellow">Error</span> Lookup failed — registry may not support RDAP, or timed out</li>
+            <li><span class="info-pill pill-orange">cached</span> Result loaded from your local 24-hour cache — no API call made</li>
+          </ul>
+        </div>
+
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            EPP Status Flags
+          </div>
+          <ul class="info-list">
+            <li><span class="info-pill pill-red">clientHold / serverHold</span> Domain is suspended — DNS not resolving</li>
+            <li><span class="info-pill pill-red">pendingDelete</span> Queued for deletion — may drop soon</li>
+            <li><span class="info-pill pill-yellow">pendingTransfer</span> Transfer to another registrar in progress</li>
+            <li><span class="info-pill pill-green">ok / active</span> Domain is live with no restrictions</li>
+            <li>Hover any EPP tag in the results table for a plain-English explanation</li>
+          </ul>
+        </div>
+
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+            Technical Notes
+          </div>
+          <ul class="info-list">
+            <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
+            <li>Rate limited to <strong>5 requests / 2 seconds</strong> to avoid overwhelming registries</li>
+            <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant</li>
+            <li>All lookups run entirely in your browser — <strong>no data is sent to any server</strong></li>
+            <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
 
     <div class="card">
       <div class="card-label">Domain List</div>
@@ -728,7 +952,15 @@
 
   </div>
 
-  <footer>BulkWHOIS — uses rdap.org public API &nbsp;·&nbsp; no data stored</footer>
+  <footer>
+    <div class="footer-inner">
+      <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener"><strong>ianos</strong></a></span>
+      <span class="footer-sep">·</span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener">rdap.org</a> &amp; <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener">IANA RDAP</a></span>
+      <span class="footer-sep">·</span>
+      <span>No data stored &nbsp;·&nbsp; MIT License</span>
+    </div>
+  </footer>
   <div class="toast" id="toast"></div>
 
   <script>
@@ -1526,6 +1758,13 @@
       initDropZone();
       updateCacheInfo();
     });
+
+    function toggleInfo() {
+      const panel  = $('infoPanel');
+      const toggle = $('infoToggle');
+      const isOpen = panel.classList.toggle('open');
+      toggle.classList.toggle('active', isOpen);
+    }
   </script>
 
 </body>
