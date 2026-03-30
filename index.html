@@ -238,10 +238,41 @@
     .progress-header {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-size: 12px;
       color: var(--para);
       margin-bottom: 8px;
     }
+
+    .progress-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-batch {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .btn-cancel {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: 3px 9px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+
+    .btn-cancel:hover { color: var(--red-lt); border-color: rgba(229,49,112,.4); }
 
     .progress-bar-bg {
       height: 3px;
@@ -805,7 +836,7 @@
         How to use
       </button>
     </header>
-    <p class="tagline">Check domain registration status and EPP flags in bulk — up to 50 domains at once</p>
+    <p class="tagline">Check domain registration status and EPP flags in bulk — any number of domains, processed in batches</p>
 
     <!-- INFO PANEL -->
     <div class="info-panel" id="infoPanel">
@@ -819,8 +850,8 @@
           <ol class="info-list info-list-ol">
             <li>Paste domains in the text area — one per line, or space/comma separated</li>
             <li>Or drag &amp; drop a <code>.txt</code> or <code>.csv</code> file (domain column is auto-detected)</li>
-            <li>Click <strong>Check Domains</strong> — results appear as each lookup completes</li>
-            <li>Filter by status or EPP flag, then <strong>Export CSV</strong> if needed</li>
+            <li>Click <strong>Check Domains</strong> — large lists are processed in batches of 50 with automatic pausing between batches to respect rate limits</li>
+            <li>Filter by status or EPP flag, then <strong>Export CSV</strong> if needed. Hit <strong>Cancel</strong> at any time to stop mid-run</li>
           </ol>
         </div>
 
@@ -858,8 +889,8 @@
           </div>
           <ul class="info-list">
             <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
-            <li>Rate limited to <strong>5 requests / 2 seconds</strong> to avoid overwhelming registries</li>
-            <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant</li>
+            <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into <strong>batches of 50</strong> with a 4-second pause between batches to avoid overwhelming registries</li>
+            <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant and skips the rate limiter entirely</li>
             <li>All lookups run entirely in your browser — <strong>no data is sent to any server</strong></li>
             <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
           </ul>
@@ -883,7 +914,7 @@
 
       <div class="or-divider"><span>or type manually</span></div>
 
-      <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One domain per line. Up to 50 at a time."></textarea>
+      <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One per line — any number of domains. Large lists are processed in batches."></textarea>
 
       <div class="btn-row">
         <button class="btn btn-primary" id="runBtn" onclick="runCheck()">
@@ -908,7 +939,14 @@
     <div class="progress-wrap" id="progressWrap">
       <div class="progress-header">
         <span id="progressLabel">Checking...</span>
-        <span id="progressCount">0 / 0</span>
+        <div class="progress-right">
+          <span id="progressBatch" class="progress-batch"></span>
+          <span id="progressCount">0 / 0</span>
+          <button class="btn-cancel" id="cancelBtn" onclick="cancelRun()" title="Stop processing">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Cancel
+          </button>
+        </div>
       </div>
       <div class="progress-bar-bg">
         <div class="progress-bar" id="progressBar"></div>
@@ -975,11 +1013,12 @@
     // ─────────────────────────────────────────────────────────────────────────
     // CONSTANTS
     // ─────────────────────────────────────────────────────────────────────────
-    const MAX_DOMAINS  = 50;
-    const MAX_LABEL    = 63;          // RFC 1035
-    const MAX_FQDN     = 253;         // RFC 1035
-    const CACHE_KEY    = 'bulkwhois_cache';
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const BATCH_SIZE    = 50;          // domains processed per batch
+    const BATCH_PAUSE   = 4000;        // ms to wait between batches (respectful to registries)
+    const MAX_LABEL     = 63;          // RFC 1035
+    const MAX_FQDN      = 253;         // RFC 1035
+    const CACHE_KEY     = 'bulkwhois_cache';
+    const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
 
     // Rate limiter: max N requests per window (ms)
     const RL_MAX      = 5;
@@ -1042,14 +1081,15 @@
     /**
      * Parse raw textarea/file text into validated unique domains.
      * Returns { valid: string[], skipped: { raw, reason }[] }
+     * No hard cap — all valid domains are returned; queue handles batching.
      */
     function parseAndValidateDomains(text) {
-      // Normalize separators: commas, spaces between domains, and newlines all accepted
+      // Normalize separators: commas, spaces, and newlines all accepted
       const normalized = text
-        .replace(/,/g, '\n')           // commas → newlines
-        .replace(/[ \t]+/g, '\n');     // whitespace runs → newlines (handles space-separated)
+        .replace(/,/g, '\n')
+        .replace(/[ \t]+/g, '\n');
 
-      const lines = normalized.split(/\r?\n/).slice(0, MAX_DOMAINS * 4);
+      const lines  = normalized.split(/\r?\n/);
       const valid   = [];
       const skipped = [];
       const seen    = new Set();
@@ -1060,12 +1100,8 @@
           if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
           continue;
         }
-        if (seen.has(r.domain)) continue;
+        if (seen.has(r.domain)) continue; // silently deduplicate
         seen.add(r.domain);
-        if (valid.length >= MAX_DOMAINS) {
-          skipped.push({ raw: r.domain, reason: `cap of ${MAX_DOMAINS} reached` });
-          continue;
-        }
         valid.push(r.domain);
       }
       return { valid, skipped };
@@ -1391,10 +1427,11 @@
       $('statErr').textContent   = err;
     }
 
-    function updateProgress(done, total, current) {
-      $('progressBar').style.width    = total ? `${Math.round(done / total * 100)}%` : '0%';
-      $('progressCount').textContent  = `${done} / ${total}`;
-      $('progressLabel').textContent  = current ? `Checking ${current}…` : 'Checking…';
+    function updateProgress({ done, total, current, batch, totalBatches }) {
+      $('progressBar').style.width   = total ? `${Math.round(done / total * 100)}%` : '0%';
+      $('progressCount').textContent = `${done} / ${total}`;
+      $('progressLabel').textContent = current ? `Checking ${current}…` : 'Checking…';
+      $('progressBatch').textContent = totalBatches > 1 ? `Batch ${batch}/${totalBatches}` : '';
     }
 
     // Pre-compute EPP filter set once per row — avoids repeated .map().includes()
@@ -1621,8 +1658,17 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MAIN RUN
+    // MAIN RUN  — batched queue with cancel support
     // ─────────────────────────────────────────────────────────────────────────
+
+    let _cancelRequested = false;
+
+    function cancelRun() {
+      if (!running) return;
+      _cancelRequested = true;
+      $('cancelBtn').textContent = 'Cancelling…';
+      $('cancelBtn').disabled = true;
+    }
 
     async function runCheck() {
       if (running) return;
@@ -1638,46 +1684,110 @@
         return;
       }
 
-      if (skipped.length) showToast(`ℹ ${skipped.length} line${skipped.length > 1 ? 's' : ''} skipped (invalid)`);
+      // Report invalid lines only (not cap-related skips — there are none now)
+      if (skipped.length) {
+        showToast(`ℹ ${skipped.length} invalid line${skipped.length > 1 ? 's' : ''} skipped`);
+      }
+
+      const totalDomains = valid.length;
+      const totalBatches = Math.ceil(totalDomains / BATCH_SIZE);
 
       running = true;
+      _cancelRequested = false;
       results = valid.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', eppCodes: [] }));
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
 
       $('runBtn').disabled    = true;
       $('exportBtn').disabled = true;
-      $('progressWrap').style.display   = 'block';
-      $('statsRow').style.display       = 'flex';
-      $('filterSection').style.display  = 'flex';
+      const cancelBtn = $('cancelBtn');
+      cancelBtn.textContent = '';
+      cancelBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel';
+      cancelBtn.disabled = false;
+      $('progressWrap').style.display  = 'block';
+      $('statsRow').style.display      = 'flex';
+      $('filterSection').style.display = 'flex';
 
       renderTable();
       updateStats();
 
-      for (let i = 0; i < valid.length; i++) {
-        updateProgress(i, valid.length, valid[i]);
-        results[i] = await checkDomain(valid[i]);
-        // Update progress label to show completed domain
-        updateProgress(i + 1, valid.length, i < valid.length - 1 ? valid[i + 1] : '');
-        renderTable();
-        updateStats();
+      let completedTotal = 0;
+
+      for (let b = 0; b < totalBatches; b++) {
+        if (_cancelRequested) break;
+
+        const batchStart = b * BATCH_SIZE;
+        const batchEnd   = Math.min(batchStart + BATCH_SIZE, totalDomains);
+        const batchDomains = valid.slice(batchStart, batchEnd);
+
+        // Batch pause between batches (not before the first one)
+        if (b > 0) {
+          // Count down the inter-batch pause so user knows we're not frozen
+          const pauseSteps = Math.ceil(BATCH_PAUSE / 500);
+          for (let s = 0; s < pauseSteps; s++) {
+            if (_cancelRequested) break;
+            const remaining = ((pauseSteps - s) * 500 / 1000).toFixed(1);
+            $('progressLabel').textContent = `Batch ${b + 1}/${totalBatches} — pausing ${remaining}s…`;
+            await sleep(500);
+          }
+          if (_cancelRequested) break;
+        }
+
+        for (let i = 0; i < batchDomains.length; i++) {
+          if (_cancelRequested) break;
+
+          const globalIdx = batchStart + i;
+          const domain    = batchDomains[i];
+
+          updateProgress({
+            done: completedTotal,
+            total: totalDomains,
+            current: domain,
+            batch: b + 1,
+            totalBatches,
+          });
+
+          results[globalIdx] = await checkDomain(domain);
+          completedTotal++;
+
+          updateProgress({
+            done: completedTotal,
+            total: totalDomains,
+            current: i < batchDomains.length - 1 ? batchDomains[i + 1] : '',
+            batch: b + 1,
+            totalBatches,
+          });
+
+          renderTable();
+          updateStats();
+        }
       }
 
-      updateProgress(valid.length, valid.length, '');
-      $('progressLabel').textContent = 'Done ✓';
+      const wasCancelled = _cancelRequested;
+
+      // Final state
+      $('progressBar').style.width   = wasCancelled ? $('progressBar').style.width : '100%';
+      $('progressLabel').textContent = wasCancelled ? `Cancelled — ${completedTotal}/${totalDomains} checked` : 'Done ✓';
+      $('progressBatch').textContent = '';
       $('runBtn').disabled    = false;
-      $('exportBtn').disabled = false;
+      $('exportBtn').disabled = results.some(r => r.status !== 'pending') ? false : true;
+      cancelBtn.disabled = true;
+
       renderTable();
       updateStats();
       updateEPPFilterBar();
       updateCacheInfo();
-      running = false;
+      running          = false;
+      _cancelRequested = false;
 
-      const cachedCount = results.filter(r => r.fromCache).length;
-      const liveCount   = valid.length - cachedCount;
-      showToast(cachedCount > 0
-        ? `✓ ${liveCount} fetched, ${cachedCount} from cache`
-        : `✓ Checked ${valid.length} domain${valid.length > 1 ? 's' : ''}`);
+      if (!wasCancelled) {
+        const cachedCount = results.filter(r => r.fromCache).length;
+        const liveCount   = totalDomains - cachedCount;
+        const batchNote   = totalBatches > 1 ? ` across ${totalBatches} batches` : '';
+        showToast(cachedCount > 0
+          ? `✓ ${liveCount} fetched, ${cachedCount} from cache${batchNote}`
+          : `✓ Checked ${totalDomains} domain${totalDomains > 1 ? 's' : ''}${batchNote}`);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1712,6 +1822,9 @@
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
       $('progressWrap').style.display  = 'none';
+      $('progressBar').style.width     = '0%';
+      $('progressBatch').textContent   = '';
+      $('cancelBtn').disabled          = false;
       $('statsRow').style.display      = 'none';
       $('filterSection').style.display = 'none';
       $('eppFilterGroup').style.display = 'none';
