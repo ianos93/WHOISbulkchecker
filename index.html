@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Check domain registration status and EPP flags in bulk using RDAP. No data stored — runs entirely in your browser." />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https:; img-src 'self' data:;" />
   <title>BulkWHOIS — Domain Status Checker</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,7 +49,6 @@
       background: var(--border2);
       border-radius: 8px;
       border: 2px solid var(--bg);
-      transition: background .2s;
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -814,9 +816,7 @@
 
     @media (max-width: 640px) {
       .info-grid { grid-template-columns: 1fr; }
-      .info-section { border-right: none !important; }
-      .info-section:last-child { border-bottom: none; }
-      .info-section:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+      .info-section { border-right: none !important; border-bottom: 1px solid var(--border); }
       .info-section:last-child { border-bottom: none !important; }
       th:nth-child(4), td:nth-child(4),
       th:nth-child(5), td:nth-child(5) { display: none; }
@@ -827,13 +827,13 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap" role="main" aria-label="BulkWHOIS domain checker">
 
     <header>
       <span class="logo">Bulk<span>WHOIS</span></span>
       <span class="badge">v1.0</span>
-      <button class="info-toggle" id="infoToggle" onclick="toggleInfo()" title="How to use">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <button class="info-toggle" id="infoToggle" aria-expanded="false" aria-controls="infoPanel" title="How to use">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         How to use
       </button>
     </header>
@@ -904,9 +904,12 @@
       <div class="card-label">Domain List</div>
 
       <!-- DROP ZONE -->
-      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput" accept=".txt,.csv" style="display:none" onchange="handleFileInput(event)" />
-        <div class="drop-icon">
+      <div class="drop-zone" id="dropZone"
+           role="button"
+           tabindex="0"
+           aria-label="Upload domain list file — click or drag and drop a .txt or .csv file">
+        <input type="file" id="fileInput" accept=".txt,.csv" style="display:none" aria-hidden="true" tabindex="-1" />
+        <div class="drop-icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         </div>
         <div class="drop-text">Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span></div>
@@ -915,16 +918,18 @@
 
       <div class="or-divider"><span>or type manually</span></div>
 
-      <textarea id="domainInput" placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One per line — any number of domains. Large lists are processed in batches."></textarea>
+      <textarea id="domainInput"
+                aria-label="Domain list input"
+                placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One per line — any number of domains. Large lists are processed in batches."></textarea>
 
       <div class="btn-row">
-        <button class="btn btn-primary" id="runBtn" onclick="runCheck()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <button class="btn btn-primary" id="runBtn" aria-label="Check domains">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           Check Domains
         </button>
-        <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
-        <button class="btn btn-export" id="exportBtn" onclick="exportCSV()" disabled>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <button class="btn btn-ghost" id="clearBtn" aria-label="Clear all domains">Clear</button>
+        <button class="btn btn-export" id="exportBtn" disabled aria-label="Export results as CSV">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Export CSV
         </button>
       </div>
@@ -933,23 +938,23 @@
     <!-- CACHE INFO -->
     <div class="cache-bar">
       <span id="cacheInfo" style="opacity:.4">Cache empty</span>
-      <button class="btn-cache-clear" onclick="cacheClear()">Clear cache</button>
+      <button class="btn-cache-clear" id="cacheClearBtn">Clear cache</button>
     </div>
 
     <!-- PROGRESS -->
-    <div class="progress-wrap" id="progressWrap">
-      <div class="progress-header">
+    <div class="progress-wrap" id="progressWrap" role="region" aria-label="Check progress">
+      <div class="progress-header" aria-live="polite" aria-atomic="true">
         <span id="progressLabel">Checking...</span>
         <div class="progress-right">
           <span id="progressBatch" class="progress-batch"></span>
           <span id="progressCount">0 / 0</span>
-          <button class="btn-cancel" id="cancelBtn" onclick="cancelRun()" title="Stop processing">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <button class="btn-cancel" id="cancelBtn" aria-label="Cancel domain checking">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             Cancel
           </button>
         </div>
       </div>
-      <div class="progress-bar-bg">
+      <div class="progress-bar-bg" role="progressbar" aria-labelledby="progressLabel" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
         <div class="progress-bar" id="progressBar"></div>
       </div>
     </div>
@@ -967,10 +972,10 @@
       <div class="filter-group">
         <div class="filter-group-label">Status</div>
         <div class="filter-bar" id="statusFilterBar">
-          <button class="filter-btn active" onclick="setStatusFilter('all', this)">All</button>
-          <button class="filter-btn" onclick="setStatusFilter('registered', this)">Registered</button>
-          <button class="filter-btn" onclick="setStatusFilter('available', this)">Available</button>
-          <button class="filter-btn" onclick="setStatusFilter('error', this)">Errors</button>
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="registered">Registered</button>
+          <button class="filter-btn" data-filter="available">Available</button>
+          <button class="filter-btn" data-filter="error">Errors</button>
         </div>
       </div>
       <div class="filter-group" id="eppFilterGroup" style="display:none">
@@ -993,14 +998,14 @@
 
   <footer>
     <div class="footer-inner">
-      <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener"><strong>ianos</strong></a></span>
+      <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener noreferrer"><strong>ianos</strong></a></span>
       <span class="footer-sep">·</span>
-      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener">rdap.org</a> &amp; <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener">IANA RDAP</a></span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a> &amp; <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a></span>
       <span class="footer-sep">·</span>
       <span>No data stored &nbsp;·&nbsp; MIT License</span>
     </div>
   </footer>
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
     // ─────────────────────────────────────────────────────────────────────────
@@ -1037,17 +1042,23 @@
     function sanitizeDomain(raw) {
       if (typeof raw !== 'string') return { ok: false, reason: 'not a string' };
 
-      // 1. Strip surrounding whitespace, convert to lower-case ASCII
       let d = raw.trim().toLowerCase();
 
-      // 2. Strip protocol, path, port — accept only the hostname part
-      d = d.replace(/^https?:\/\//i, '')
-           .replace(/^ftp:\/\//i, '')
-           .replace(/\/.*$/, '')       // strip path
-           .replace(/\?.*$/, '')       // strip query
-           .replace(/#.*$/, '')        // strip hash
-           .replace(/:\d+$/, '')       // strip port
-           .replace(/^www\./, '');     // strip leading www.
+      // 1. Extract hostname — try URL parse first (fast path for http/ftp URLs),
+      //    then fall back to sequential regex stripping for bare hostnames.
+      if (/^https?:\/\//i.test(d) || /^ftp:\/\//i.test(d)) {
+        try {
+          d = new URL(d).hostname;
+        } catch {
+          return { ok: false, reason: 'invalid URL' };
+        }
+      } else {
+        // Bare hostname — strip any accidental path/query/hash/port
+        d = d.replace(/\/.*$/, '').replace(/\?.*$/, '').replace(/#.*$/, '').replace(/:\d+$/, '');
+      }
+
+      // 2. Strip leading www.
+      d = d.replace(/^www\./, '');
 
       // 3. Skip blank lines and comment lines
       if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
@@ -1063,19 +1074,16 @@
       for (const label of labels) {
         if (!label) return { ok: false, reason: 'empty label' };
         if (label.length > MAX_LABEL) return { ok: false, reason: `label too long: ${label}` };
-        // Allow letters, digits, hyphens; no leading/trailing hyphen
         if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label) && !/^xn--[a-z0-9-]+$/.test(label)) {
           return { ok: false, reason: `invalid label: ${label}` };
         }
       }
 
-      // 7. TLD must be at least 2 chars and all alpha
+      // 7. TLD must be at least 2 chars and all alpha (no digits — rules out IP-like strings)
       const tld = labels[labels.length - 1];
       if (!/^[a-z]{2,}$/.test(tld)) return { ok: false, reason: `invalid TLD: ${tld}` };
 
-      // 8. Must have at least a second-level label
-      if (labels.length < 2) return { ok: false, reason: 'missing SLD' };
-
+      // labels.length >= 2 is guaranteed by the dot-check above combined with TLD validation
       return { ok: true, domain: d };
     }
 
@@ -1153,7 +1161,17 @@
     function _scheduleCacheFlush() {
       clearTimeout(_cacheFlushTimer);
       _cacheFlushTimer = setTimeout(() => {
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore)); } catch {}
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore));
+        } catch (e) {
+          if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+            // Prune oldest 25% of entries and retry once
+            const entries = Object.entries(_cacheStore).sort((a, b) => a[1].ts - b[1].ts);
+            const pruneCount = Math.max(1, Math.floor(entries.length * 0.25));
+            for (let i = 0; i < pruneCount; i++) delete _cacheStore[entries[i][0]];
+            try { localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore)); } catch { /* give up */ }
+          }
+        }
       }, 300);
     }
 
@@ -1208,21 +1226,30 @@
     // IANA RDAP BOOTSTRAP  (TLD → authoritative RDAP base URL)
     // Cached in memory for the session so we only fetch dns.json once.
     // ─────────────────────────────────────────────────────────────────────────
-    let _rdapBootstrap = null; // Map<tld, url[]>
+    let _rdapBootstrap = null;       // Map<tld, baseUrl> once loaded
+    let _rdapBootstrapFetch = null;  // in-flight Promise — prevents duplicate fetches
 
     async function getRDAPBase(tld) {
       if (!_rdapBootstrap) {
-        try {
-          const res = await fetch('https://data.iana.org/rdap/dns.json', { signal: makeSignal(6000) });
-          if (res.ok) {
-            const json = await res.json();
-            _rdapBootstrap = new Map();
-            for (const [tlds, urls] of json.services) {
-              for (const t of tlds) _rdapBootstrap.set(t.toLowerCase(), urls[0]);
-            }
-          }
-        } catch { /* silently fall back to rdap.org */ }
-        if (!_rdapBootstrap) _rdapBootstrap = new Map(); // empty sentinel
+        // Coalesce concurrent callers onto the same fetch
+        if (!_rdapBootstrapFetch) {
+          _rdapBootstrapFetch = (async () => {
+            try {
+              const res = await fetch('https://data.iana.org/rdap/dns.json', { signal: makeSignal(6000) });
+              if (res.ok) {
+                const json = await res.json();
+                const map = new Map();
+                for (const [tlds, urls] of json.services) {
+                  for (const t of tlds) map.set(t.toLowerCase(), urls[0]);
+                }
+                _rdapBootstrap = map;
+              }
+            } catch { /* fall back to rdap.org proxy */ }
+            if (!_rdapBootstrap) _rdapBootstrap = new Map(); // empty sentinel
+            _rdapBootstrapFetch = null;
+          })();
+        }
+        await _rdapBootstrapFetch;
       }
       return _rdapBootstrap.get(tld.toLowerCase()) || null;
     }
@@ -1285,20 +1312,24 @@
 
         if (res.status === 429) {
           await rateLimiter.backoff();
-          await rateLimiter.wait(); // re-acquire token after backoff
+          // After backoff the bucket is empty — acquire one fresh token
+          await rateLimiter.wait();
           const retry = await fetch(url, { signal: makeSignal(10000), credentials: 'omit' });
           if (retry.status === 404) {
             return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
           }
           if (!retry.ok) return _rdapError(domain, `RDAP ${retry.status}`);
-          const retryData = await retry.json();
+          let retryData;
+          try { retryData = await retry.json(); } catch { return _rdapError(domain, 'RDAP invalid JSON on retry'); }
           if (retryData.errorCode) return _rdapError(domain, `RDAP error ${retryData.errorCode}`);
           return parseRDAPResponse(domain, retryData);
         }
 
         if (!res.ok) return _rdapError(domain, `RDAP ${res.status}`);
 
-        const data = await res.json();
+        let data;
+        try { data = await res.json(); }
+        catch { return _rdapError(domain, 'RDAP invalid JSON response'); }
 
         // Check for RDAP-level error embedded in a 200 response
         if (data.errorCode) {
@@ -1411,8 +1442,13 @@
     // RENDERING  — batched DOM writes, stats in single pass
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Cached DOM refs — avoids repeated getElementById in hot path
-    const $ = id => document.getElementById(id);
+    // Null-safe DOM helper — throws a clear error if an expected element is missing
+    // rather than silently propagating null through the codebase.
+    function $(id) {
+      const el = document.getElementById(id);
+      if (!el && typeof id === 'string') console.warn(`[BulkWHOIS] Element #${id} not found`);
+      return el;
+    }
 
     function updateStats() {
       // Single pass — O(n) not O(3n)
@@ -1429,15 +1465,12 @@
     }
 
     function updateProgress({ done, total, current, batch, totalBatches }) {
-      $('progressBar').style.width   = total ? `${Math.round(done / total * 100)}%` : '0%';
+      const pct = total ? Math.round(done / total * 100) : 0;
+      $('progressBar').style.width   = `${pct}%`;
+      $('progressBar').parentElement.setAttribute('aria-valuenow', pct);
       $('progressCount').textContent = `${done} / ${total}`;
       $('progressLabel').textContent = current ? `Checking ${current}…` : 'Checking…';
       $('progressBatch').textContent = totalBatches > 1 ? `Batch ${batch}/${totalBatches}` : '';
-    }
-
-    // Pre-compute EPP filter set once per row — avoids repeated .map().includes()
-    function buildEPPSet(eppCodes) {
-      return new Set((eppCodes || []).map(c => c.toLowerCase()));
     }
 
     function renderTable() {
@@ -1451,20 +1484,28 @@
       }
 
       const eppFilterLower = currentEPPFilter ? currentEPPFilter.toLowerCase() : null;
+      // Build the filter set once outside the loop — not once per row
+      const eppFilterSet = eppFilterLower ? new Set([eppFilterLower]) : null;
       const parts = [];
 
       for (const r of results) {
         // Status filter
         if (currentStatusFilter !== 'all' && r.status !== currentStatusFilter) continue;
-        // EPP filter — use pre-built Set for O(1) lookup
-        if (eppFilterLower && !buildEPPSet(r.eppCodes).has(eppFilterLower)) continue;
+        // EPP filter — O(1) Set lookup; build row's EPP set only when filter is active
+        if (eppFilterSet) {
+          const rowEPP = new Set((r.eppCodes || []).map(c => c.toLowerCase()));
+          if (!rowEPP.has(eppFilterLower)) continue;
+        }
 
+        const safeDomain = escHtml(r.domain);
         const domainCell = r.status === 'registered'
-          ? `<a href="https://who.is/whois/${r.domain}" target="_blank" rel="noopener">${r.domain}</a>`
-          : r.domain;
+          ? `<a href="https://who.is/whois/${safeDomain}" target="_blank" rel="noopener noreferrer">${safeDomain}</a>`
+          : safeDomain;
 
-        const sourceTag = r.source && r.source !== 'RDAP'
-          ? `<span class="source-badge source-${r.source.toLowerCase()}" title="Data via ${r.source}">${r.source}</span>`
+        // Whitelist source values to prevent CSS class injection
+        const SAFE_SOURCES = new Set(['RDAP', 'WHOIS']);
+        const sourceTag = r.source && r.source !== 'RDAP' && SAFE_SOURCES.has(r.source)
+          ? `<span class="source-badge source-${r.source.toLowerCase()}" title="Data via ${escHtml(r.source)}">${escHtml(r.source)}</span>`
           : '';
 
         const cacheTag = r.fromCache
@@ -1548,6 +1589,8 @@
       renderTable();
     }
 
+    let _eppBarListenerController = null;
+
     function updateEPPFilterBar() {
       const seen = new Map();
       for (const r of results) {
@@ -1564,15 +1607,22 @@
         return td || a[0].localeCompare(b[0]);
       });
 
-      // Count per code in one pass
       const counts = {};
       for (const r of results) {
         for (const code of (r.eppCodes || [])) counts[code] = (counts[code] || 0) + 1;
       }
 
       $('eppFilterBar').innerHTML = sorted.map(([code, meta]) =>
-        `<button class="filter-btn epp-f-${meta.tier}" onclick="setEPPFilter('${escAttr(code)}', this)">${escHtml(meta.label)} <span style="opacity:.6">(${counts[code] || 0})</span></button>`
+        `<button class="filter-btn epp-f-${meta.tier}" data-epp-code="${escAttr(code)}">${escHtml(meta.label)} <span style="opacity:.6">(${counts[code] || 0})</span></button>`
       ).join('');
+
+      // Remove any previous listener before attaching a new one
+      if (_eppBarListenerController) _eppBarListenerController.abort();
+      _eppBarListenerController = new AbortController();
+      $('eppFilterBar').addEventListener('click', e => {
+        const btn = e.target.closest('[data-epp-code]');
+        if (btn) setEPPFilter(btn.dataset.eppCode, btn);
+      }, { signal: _eppBarListenerController.signal });
 
       $('eppFilterGroup').style.display = 'flex';
     }
@@ -1581,22 +1631,10 @@
     // FILE IMPORT
     // ─────────────────────────────────────────────────────────────────────────
 
-    function initDropZone() {
-      const zone = $('dropZone');
-      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-      zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
-      zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file) processFile(file);
-      });
-    }
-
     function handleFileInput(e) {
       const file = e.target.files[0];
       if (file) processFile(file);
-      e.target.value = '';
+      e.target.value = ''; // reset so same file can be re-selected
     }
 
     function processFile(file) {
@@ -1605,6 +1643,7 @@
       if (file.size > 500_000) { showToast('⚠ File too large (max 500 KB)'); return; }
 
       const reader = new FileReader();
+      reader.onerror = () => showToast('⚠ Could not read file');
       reader.onload = e => {
         const text = e.target.result;
         const raw  = ext === 'csv' ? extractCSVDomains(text) : text;
@@ -1633,7 +1672,7 @@
       const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (!lines.length) return '';
       const rows = lines.map(splitCSVLine);
-      const numCols = Math.max(...rows.map(r => r.length));
+      const numCols = rows.reduce((max, r) => Math.max(max, r.length), 0);
       let bestCol = 0, bestScore = 0;
       for (let c = 0; c < numCols; c++) {
         const score = rows.slice(0, 10).filter(r => r[c] && looksLikeDomain(r[c])).length;
@@ -1655,7 +1694,9 @@
     }
 
     function looksLikeDomain(s) {
-      return /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?\.[a-z]{2,}$/i.test(s.trim());
+      // Loose check for CSV column detection only — not a validator.
+      // Allows subdomains (a.b.c.io), rejects trailing hyphens, requires valid TLD.
+      return /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(s.trim());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1701,9 +1742,9 @@
 
       $('runBtn').disabled    = true;
       $('exportBtn').disabled = true;
+      const CANCEL_BTN_HTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel';
       const cancelBtn = $('cancelBtn');
-      cancelBtn.textContent = '';
-      cancelBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel';
+      cancelBtn.innerHTML = CANCEL_BTN_HTML;
       cancelBtn.disabled = false;
       $('progressWrap').style.display  = 'block';
       $('statsRow').style.display      = 'flex';
@@ -1771,7 +1812,7 @@
       $('progressLabel').textContent = wasCancelled ? `Cancelled — ${completedTotal}/${totalDomains} checked` : 'Done ✓';
       $('progressBatch').textContent = '';
       $('runBtn').disabled    = false;
-      $('exportBtn').disabled = results.some(r => r.status !== 'pending') ? false : true;
+      $('exportBtn').disabled = !results.some(r => r.status !== 'pending');
       cancelBtn.disabled = true;
 
       renderTable();
@@ -1797,17 +1838,31 @@
 
     function exportCSV() {
       if (!results.length) return;
-      const rows = ['Domain,Availability,EPP Flags,Registrar,Expiry,Source,Cached',
-        ...results.map(r =>
-          `"${r.domain}","${r.status}","${(r.eppCodes||[]).join(' | ')}","${r.registrar}","${r.expiry}","${r.source||''}","${r.fromCache?'yes':'no'}"`)
-      ];
-      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+
+      // Proper CSV field escaping — wrap in quotes and double any internal quotes
+      const csvField = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+      const header = 'Domain,Availability,EPP Flags,Registrar,Expiry,Source,Cached';
+      const rows = results.map(r => [
+        csvField(r.domain),
+        csvField(r.status),
+        csvField((r.eppCodes || []).join(' | ')),
+        csvField(r.registrar),
+        csvField(r.expiry),
+        csvField(r.source || ''),
+        csvField(r.fromCache ? 'yes' : 'no'),
+      ].join(','));
+
+      const csv = [header, ...rows].join('\r\n'); // RFC 4180 uses CRLF
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url  = URL.createObjectURL(blob);
       const a    = Object.assign(document.createElement('a'), {
         href: url,
-        download: `bulkwhois-${new Date().toISOString().slice(0,10)}.csv`
+        download: `bulkwhois-${new Date().toISOString().slice(0, 10)}.csv`
       });
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       showToast('✓ CSV exported');
     }
@@ -1822,8 +1877,14 @@
       results = [];
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
+
+      // Tear down EPP bar listener
+      if (_eppBarListenerController) { _eppBarListenerController.abort(); _eppBarListenerController = null; }
+
       $('progressWrap').style.display  = 'none';
-      $('progressBar').style.width     = '0%';
+      const bar = $('progressBar');
+      bar.style.width = '0%';
+      bar.parentElement.setAttribute('aria-valuenow', 0);
       $('progressBatch').textContent   = '';
       $('cancelBtn').disabled          = false;
       $('statsRow').style.display      = 'none';
@@ -1845,17 +1906,22 @@
     // UTILITIES
     // ─────────────────────────────────────────────────────────────────────────
 
+    let _toastTimer = null;
     function showToast(msg) {
       const t = $('toast');
       t.textContent = msg;
       t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 3000);
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
     }
 
     function escHtml(s) {
       return String(s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function escAttr(s) {
@@ -1871,6 +1937,42 @@
     document.addEventListener('DOMContentLoaded', () => {
       initDropZone();
       updateCacheInfo();
+
+      // ── Button wiring — all event listeners in one place, no inline onclick ──
+      $('infoToggle').addEventListener('click', toggleInfo);
+      $('runBtn').addEventListener('click', () => runCheck().catch(err => {
+        console.error('runCheck failed:', err);
+        showToast('⚠ Unexpected error — check console');
+        running = false;
+        $('runBtn').disabled = false;
+      }));
+      $('cancelBtn').addEventListener('click', cancelRun);
+      $('exportBtn').addEventListener('click', exportCSV);
+      $('clearBtn').addEventListener('click', clearAll);
+      $('cacheClearBtn').addEventListener('click', cacheClear);
+
+      // Drop zone — click, keyboard activation, and drag-and-drop
+      const dropZone = $('dropZone');
+      const fileInput = $('fileInput');
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+      });
+      fileInput.addEventListener('change', handleFileInput);
+      dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+      dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) processFile(file);
+      });
+
+      // Status filter bar — event delegation on the container
+      $('statusFilterBar').addEventListener('click', e => {
+        const btn = e.target.closest('[data-filter]');
+        if (btn) setStatusFilter(btn.dataset.filter, btn);
+      });
     });
 
     function toggleInfo() {
@@ -1878,6 +1980,7 @@
       const toggle = $('infoToggle');
       const isOpen = panel.classList.toggle('open');
       toggle.classList.toggle('active', isOpen);
+      toggle.setAttribute('aria-expanded', isOpen); // keep ARIA in sync
     }
   </script>
 
