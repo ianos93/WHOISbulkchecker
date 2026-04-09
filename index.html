@@ -609,9 +609,31 @@
       background: var(--border2);
     }
 
+    .host-cell { color: var(--para); font-size: 12px; max-width: 160px; }
+
+    .host-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 5px;
+      background: rgba(167,169,190,.07);
+      border: 1px solid rgba(167,169,190,.18);
+      color: var(--para);
+      white-space: nowrap;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .host-badge svg { flex-shrink: 0; opacity: .6; }
+
     @media (max-width: 640px) {
       th:nth-child(4), td:nth-child(4),
-      th:nth-child(5), td:nth-child(5) { display: none; }
+      th:nth-child(5), td:nth-child(5),
+      th:nth-child(6), td:nth-child(6) { display: none; }
       .btn-export { margin-left: 0; }
       .filter-section { gap: 14px; }
     }
@@ -818,10 +840,6 @@
       .info-grid { grid-template-columns: 1fr; }
       .info-section { border-right: none !important; border-bottom: 1px solid var(--border); }
       .info-section:last-child { border-bottom: none !important; }
-      th:nth-child(4), td:nth-child(4),
-      th:nth-child(5), td:nth-child(5) { display: none; }
-      .btn-export { margin-left: 0; }
-      .filter-section { gap: 14px; }
       .footer-inner { flex-direction: column; gap: 4px; }
     }
   </style>
@@ -892,7 +910,8 @@
             <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
             <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into <strong>batches of 50</strong> with a 4-second pause between batches to avoid overwhelming registries</li>
             <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant and skips the rate limiter entirely</li>
-            <li>All lookups run entirely in your browser — <strong>no data is sent to any server</strong></li>
+            <li><strong>Hosting provider</strong> is detected by resolving the domain's NS records via <strong>Cloudflare DoH</strong>, then looking up the NS IP's ASN organisation via <strong>ip-api.com</strong> (free, no key)</li>
+            <li>All lookups run entirely in your browser — <strong>no data is sent to any server owned by this tool</strong></li>
             <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
           </ul>
         </div>
@@ -1000,7 +1019,7 @@
     <div class="footer-inner">
       <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener noreferrer"><strong>ianos</strong></a></span>
       <span class="footer-sep">·</span>
-      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a> &amp; <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a></span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a> &amp; <a href="https://ip-api.com" target="_blank" rel="noopener noreferrer">ip-api.com</a></span>
       <span class="footer-sep">·</span>
       <span>No data stored &nbsp;·&nbsp; MIT License</span>
     </div>
@@ -1281,12 +1300,19 @@
       // 5. Cache successful results only
       if (!result._failed) {
         const { _failed, ...clean } = result;
+        // 5a. For registered domains, try to detect hosting provider via NS lookup
+        if (clean.status === 'registered') {
+          clean.hostingProvider = await detectHostingProvider(domain);
+        } else {
+          clean.hostingProvider = null;
+        }
         cacheSet(domain, clean);
         return { ...clean, fromCache: false };
       }
 
       // Return the error result as-is (don't cache errors)
       const { _failed, ...errResult } = result;
+      errResult.hostingProvider = null;
       return { ...errResult, fromCache: false };
     }
 
@@ -1405,6 +1431,75 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // HOSTING PROVIDER DETECTION  (DNS → NS IP → ASN → org name)
+    // Uses Cloudflare DoH for NS resolution (no CORS issues, fast, privacy-friendly)
+    // then ip-api.com (free, no key, 45 req/min) for IP→org lookup.
+    // Results cached alongside RDAP data to avoid redundant lookups.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Small in-memory cache for IP→org lookups so shared NS IPs aren't re-fetched
+    const _ipOrgCache = new Map();
+
+    async function resolveNSIPs(domain) {
+      try {
+        const res = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
+          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
+        );
+        if (!res.ok) return [];
+        const json = await res.json();
+        const nsNames = (json.Answer || [])
+          .filter(r => r.type === 2) // NS record type
+          .map(r => r.data.replace(/\.$/, '').toLowerCase())
+          .slice(0, 2); // Only need first 2 NS to identify the provider
+
+        // Resolve each NS hostname to an IP (type=A)
+        const ips = [];
+        for (const ns of nsNames) {
+          try {
+            const r2 = await fetch(
+              `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(ns)}&type=A`,
+              { headers: { Accept: 'application/dns-json' }, signal: makeSignal(4000) }
+            );
+            if (!r2.ok) continue;
+            const j2 = await r2.json();
+            const ip = (j2.Answer || []).find(rec => rec.type === 1)?.data;
+            if (ip) ips.push(ip);
+          } catch { /* skip this NS */ }
+        }
+        return ips;
+      } catch { return []; }
+    }
+
+    async function ipToOrg(ip) {
+      if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
+      try {
+        const res = await fetch(
+          `https://ip-api.com/json/${ip}?fields=org,isp,as`,
+          { signal: makeSignal(5000) }
+        );
+        if (!res.ok) { _ipOrgCache.set(ip, null); return null; }
+        const json = await res.json();
+        // Prefer org over isp; strip leading AS number from org field
+        let name = json.org || json.isp || null;
+        if (name) name = name.replace(/^AS\d+\s+/i, '').trim();
+        _ipOrgCache.set(ip, name);
+        return name;
+      } catch { _ipOrgCache.set(ip, null); return null; }
+    }
+
+    async function detectHostingProvider(domain) {
+      const ips = await resolveNSIPs(domain);
+      if (!ips.length) return null;
+      // Use the first IP that resolves to an org
+      for (const ip of ips) {
+        const org = await ipToOrg(ip);
+        if (org) return org;
+      }
+      return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // EPP KNOWLEDGE BASE
     // ─────────────────────────────────────────────────────────────────────────
     const EPP_META = {
@@ -1518,19 +1613,20 @@
           <td>${renderEPPTags(r.eppCodes)}</td>
           <td class="registrar-cell">${escHtml(r.registrar)}</td>
           <td class="expiry-cell">${expiryCell(r.expiry)}</td>
+          <td class="host-cell">${renderHostingCell(r)}</td>
         </tr>`);
       }
 
       const tbody = parts.length
         ? parts.join('')
-        : `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
+        : `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
 
       // Single innerHTML write per render cycle
       $('tableContainer').innerHTML = `
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th>
+              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th><th>Hosting</th>
             </tr></thead>
             <tbody>${tbody}</tbody>
           </table>
@@ -1564,6 +1660,23 @@
           ? `<span class="expiry-soon">${expiry} ⚠</span>`
           : `<span class="expiry-old">${expiry}</span>`;
       } catch { return escHtml(expiry); }
+    }
+
+    function renderHostingCell(r) {
+      if (r.status === 'pending') {
+        return `<span style="color:var(--muted);font-size:12px">…</span>`;
+      }
+      if (r.status !== 'registered') {
+        return `<span style="color:var(--muted);font-size:11px">—</span>`;
+      }
+      if (r.hostingProvider === undefined || r.hostingProvider === null) {
+        // registered but lookup still in progress or failed
+        return `<span style="color:var(--muted);font-size:11px">—</span>`;
+      }
+      return `<span class="host-badge" title="${escAttr(r.hostingProvider)}">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        ${escHtml(r.hostingProvider)}
+      </span>`;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1842,13 +1955,14 @@
       // Proper CSV field escaping — wrap in quotes and double any internal quotes
       const csvField = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-      const header = 'Domain,Availability,EPP Flags,Registrar,Expiry,Source,Cached';
+      const header = 'Domain,Availability,EPP Flags,Registrar,Expiry,Hosting Provider,Source,Cached';
       const rows = results.map(r => [
         csvField(r.domain),
         csvField(r.status),
         csvField((r.eppCodes || []).join(' | ')),
         csvField(r.registrar),
         csvField(r.expiry),
+        csvField(r.hostingProvider || ''),
         csvField(r.source || ''),
         csvField(r.fromCache ? 'yes' : 'no'),
       ].join(','));
