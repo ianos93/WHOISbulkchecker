@@ -441,22 +441,24 @@
       font-size: 13px;
       font-weight: 500;
       color: var(--text);
+    }
+
+    /* inner flex row: scrollable text + pinned badges */
+    .domain-cell-inner {
       display: flex;
       align-items: center;
       gap: 6px;
       overflow: hidden;
     }
 
-    /* scroll-inner inside domain-cell shrinks to fill remaining space */
-    .domain-cell .scroll-inner {
+    .domain-cell-inner .scroll-cell {
       flex: 1;
       min-width: 0;
-      overflow: hidden;
     }
 
     /* Badges stay pinned to the right, never scroll or clip */
-    .domain-cell .cache-badge,
-    .domain-cell .source-badge {
+    .domain-cell-inner .cache-badge,
+    .domain-cell-inner .source-badge {
       flex-shrink: 0;
     }
 
@@ -711,6 +713,91 @@
       .btn-export { margin-left: 0; }
       .filter-section { gap: 14px; }
     }
+    /* ── EXPANDABLE ROWS ── */
+    .data-row { cursor: pointer; }
+    .data-row:hover .row-chevron { color: var(--accent); }
+
+    .chevron-cell {
+      width: 32px;
+      text-align: center;
+      padding: 12px 8px !important;
+      color: var(--muted);
+    }
+
+    .row-chevron {
+      display: inline-block;
+      font-size: 16px;
+      line-height: 1;
+      transition: transform .2s ease, color .15s;
+      user-select: none;
+    }
+
+    .row-chevron.chevron-open { transform: rotate(90deg); color: var(--accent); }
+
+    .data-row.row-expanded { background: var(--surface2); }
+    .data-row.row-expanded td { border-bottom: none; }
+
+    .detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border2); }
+
+    .detail-panel {
+      display: flex;
+      gap: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--border2);
+      animation: detailIn .18s ease both;
+    }
+
+    @keyframes detailIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .detail-section {
+      flex: 1;
+      padding: 16px 20px;
+      border-right: 1px solid var(--border);
+    }
+
+    .detail-section:last-child { border-right: none; }
+
+    .detail-section-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .detail-field {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      margin-bottom: 8px;
+    }
+
+    .detail-field:last-child { margin-bottom: 0; }
+
+    .detail-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+    }
+
+    .detail-val {
+      font-size: 12px;
+      color: var(--para);
+      word-break: break-word;
+    }
+
+    .detail-val a { color: var(--accent); text-decoration: none; }
+    .detail-val a:hover { text-decoration: underline; }
+
     /* ── CACHE BAR ── */
     .cache-bar {
       display: flex;
@@ -1376,9 +1463,14 @@
         const { _failed, ...clean } = result;
         // 5a. For registered domains, try to detect hosting provider via NS lookup
         if (clean.status === 'registered') {
-          clean.hostingProvider = await detectHostingProvider(domain);
+          const hostInfo = await detectHostingProvider(domain);
+          clean.hostingProvider = hostInfo?.org || null;
+          clean.hostAsn         = hostInfo?.asn || null;
+          clean.hostAbuse       = hostInfo?.abuse || null;
         } else {
           clean.hostingProvider = null;
+          clean.hostAsn         = null;
+          clean.hostAbuse       = null;
         }
         cacheSet(domain, clean);
         return { ...clean, fromCache: false };
@@ -1456,11 +1548,18 @@
     function parseRDAPResponse(domain, data) {
       return {
         domain,
-        status:    'registered',
-        registrar: extractRegistrar(data),
-        expiry:    extractExpiry(data),
-        eppCodes:  extractEPP(data),
-        source:    'RDAP',
+        status:       'registered',
+        registrar:    extractRegistrar(data),
+        expiry:       extractExpiry(data),
+        eppCodes:     extractEPP(data),
+        source:       'RDAP',
+        abuseEmail:   extractAbuseEmail(data),
+        abusePhone:   extractAbusePhone(data),
+        ianaId:       extractIanaId(data),
+        registrarUrl: extractRegistrarUrl(data),
+        created:      extractEventDate(data, 'registration'),
+        updated:      extractEventDate(data, 'last changed'),
+        nameservers:  extractNameservers(data),
       };
     }
 
@@ -1502,6 +1601,96 @@
         .map(item => item.trim())
         .filter(Boolean);
       return [...new Set(codes)];
+    }
+
+    function extractAbuseEmail(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        // abuse contact is on the registrar entity or a nested abuse entity
+        const checkEntity = (ent) => {
+          if (Array.isArray(ent.roles) && ent.roles.includes('abuse')) {
+            if (Array.isArray(ent.vcardArray?.[1])) {
+              for (const v of ent.vcardArray[1]) {
+                if (v[0] === 'email' && v[3]) return String(v[3]);
+              }
+            }
+          }
+          return null;
+        };
+        let found = checkEntity(e);
+        if (found) return found;
+        // Check nested entities (abuse role is often nested under registrar)
+        if (Array.isArray(e.entities)) {
+          for (const sub of e.entities) {
+            found = checkEntity(sub);
+            if (found) return found;
+          }
+        }
+      }
+      return null;
+    }
+
+    function extractAbusePhone(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        const checkEntity = (ent) => {
+          if (Array.isArray(ent.roles) && ent.roles.includes('abuse')) {
+            if (Array.isArray(ent.vcardArray?.[1])) {
+              for (const v of ent.vcardArray[1]) {
+                if (v[0] === 'tel' && v[3]) return String(v[3]);
+              }
+            }
+          }
+          return null;
+        };
+        let found = checkEntity(e);
+        if (found) return found;
+        if (Array.isArray(e.entities)) {
+          for (const sub of e.entities) { found = checkEntity(sub); if (found) return found; }
+        }
+      }
+      return null;
+    }
+
+    function extractIanaId(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar') && e.handle) {
+          return String(e.handle);
+        }
+      }
+      return null;
+    }
+
+    function extractRegistrarUrl(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar')) {
+          if (Array.isArray(e.links)) {
+            const link = e.links.find(l => l.rel === 'related' || l.rel === 'self');
+            if (link?.href) return link.href;
+          }
+        }
+      }
+      return null;
+    }
+
+    function extractEventDate(data, action) {
+      if (!Array.isArray(data.events)) return null;
+      for (const ev of data.events) {
+        if (ev.eventAction === action && ev.eventDate) {
+          try { return new Date(ev.eventDate).toISOString().slice(0, 10); } catch { /* skip */ }
+        }
+      }
+      return null;
+    }
+
+    function extractNameservers(data) {
+      if (!Array.isArray(data.nameservers)) return null;
+      const ns = data.nameservers
+        .map(n => (n.ldhName || n.unicodeName || '').toLowerCase())
+        .filter(Boolean);
+      return ns.length ? ns : null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1602,18 +1791,21 @@
     async function ipToOrg(ip) {
       if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
       try {
-        // ipapi.co supports CORS for browser requests (unlike ip-api.com)
         const res = await fetch(
-          `https://ipapi.co/${ip}/org/`,
+          `https://ipapi.co/${ip}/json/`,
           { signal: makeSignal(5000) }
         );
         if (!res.ok) { _ipOrgCache.set(ip, null); return null; }
-        const text = (await res.text()).trim();
-        // Response is plain text like "AS13335 Cloudflare, Inc."
-        // Strip the leading ASN token
-        const name = text.replace(/^AS\d+\s+/i, '').trim() || null;
-        _ipOrgCache.set(ip, name);
-        return name;
+        const json = await res.json();
+        let org = json.org || null;
+        if (org) org = org.replace(/^AS\d+\s+/i, '').trim();
+        const result = {
+          org:   org,
+          asn:   json.asn  || null,
+          abuse: json.abuse_contact_email || null,
+        };
+        _ipOrgCache.set(ip, result);
+        return result;
       } catch { _ipOrgCache.set(ip, null); return null; }
     }
 
@@ -1624,15 +1816,15 @@
       // Pass 1: pattern match on NS hostname (fast, no extra requests)
       for (const ns of nsNames) {
         const label = matchNSProvider(ns);
-        if (label) return label;
+        if (label) return { org: label, asn: null, abuse: null };
       }
 
       // Pass 2: resolve one NS to an IP and ask ipapi.co (CORS-safe)
       for (const ns of nsNames.slice(0, 2)) {
         const ip = await resolveARecord(ns);
         if (!ip) continue;
-        const org = await ipToOrg(ip);
-        if (org) return org;
+        const info = await ipToOrg(ip);
+        if (info?.org) return info;
       }
 
       return null;
@@ -1746,32 +1938,41 @@
           ? `<span class="cache-badge" title="Loaded from local cache (24 h TTL)">cached</span>`
           : '';
 
-        parts.push(`<tr>
-          <td class="domain-cell scroll-cell"><span class="scroll-inner">${domainCell}</span>${sourceTag}${cacheTag}</td>
+        parts.push(`<tr class="data-row" data-domain="${escAttr(r.domain)}" data-idx="${parts.length}">
+          <td class="domain-cell">
+            <div class="domain-cell-inner">
+              <span class="scroll-cell"><span class="scroll-inner">${domainCell}</span></span>
+              ${sourceTag}${cacheTag}
+            </div>
+          </td>
           <td>${statusBadge(r.status)}</td>
           <td>${renderEPPTags(r.eppCodes)}</td>
           <td class="registrar-cell">${escHtml(r.registrar)}</td>
           <td class="expiry-cell">${expiryCell(r.expiry)}</td>
           <td class="host-cell scroll-cell">${renderHostingCell(r)}</td>
+          <td class="chevron-cell"><span class="row-chevron" aria-label="Expand details">›</span></td>
+        </tr>
+        <tr class="detail-row" id="detail-${escAttr(r.domain)}" style="display:none">
+          <td colspan="7">${renderDetailPanel(r)}</td>
         </tr>`);
       }
 
       const tbody = parts.length
         ? parts.join('')
-        : `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
+        : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
 
       // Single innerHTML write per render cycle
       $('tableContainer').innerHTML = `
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th><th>Hosting</th>
+              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th><th>Hosting</th><th style="width:32px"></th>
             </tr></thead>
             <tbody>${tbody}</tbody>
           </table>
         </div>`;
       // Measure overflow after DOM is updated so scroll distances are accurate
-      requestAnimationFrame(applyScrollDistances);
+      requestAnimationFrame(() => { applyScrollDistances(); wireDetailRows(); });
     }
 
     function renderEPPTags(codes) {
@@ -1863,6 +2064,66 @@
             inner.style.transition = 'transform .4s ease';
             inner.style.transform  = 'translateX(0)';
           });
+        });
+      });
+    }
+
+    function renderDetailPanel(r) {
+      const field = (label, val) => val && val !== '—'
+        ? `<div class="detail-field"><span class="detail-label">${label}</span><span class="detail-val">${escHtml(val)}</span></div>`
+        : '';
+
+      const registrarSection = r.registrar && r.registrar !== '—' ? `
+        <div class="detail-section">
+          <div class="detail-section-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            Registrar
+          </div>
+          ${field('Name', r.registrar)}
+          ${field('Abuse Email', r.abuseEmail)}
+          ${field('Abuse Phone', r.abusePhone)}
+          ${field('IANA ID', r.ianaId)}
+          ${field('Registrar URL', r.registrarUrl)}
+        </div>` : '';
+
+      const hostSection = r.hostingProvider ? `
+        <div class="detail-section">
+          <div class="detail-section-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Hosting / Nameservers
+          </div>
+          ${field('Provider', r.hostingProvider)}
+          ${field('Abuse Contact', r.hostAbuse)}
+          ${field('ASN', r.hostAsn)}
+          ${field('Nameservers', r.nameservers ? r.nameservers.join(', ') : null)}
+        </div>` : '';
+
+      const domainSection = `
+        <div class="detail-section">
+          <div class="detail-section-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+            Domain
+          </div>
+          ${field('Created', r.created)}
+          ${field('Updated', r.updated)}
+          ${field('Expiry', r.expiry)}
+          ${field('Status', (r.eppCodes || []).join(', '))}
+        </div>`;
+
+      return `<div class="detail-panel">${domainSection}${registrarSection}${hostSection}</div>`;
+    }
+
+    function wireDetailRows() {
+      $('tableContainer').querySelectorAll('.data-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const domain  = row.dataset.domain;
+          const detail  = document.getElementById(`detail-${domain}`);
+          const chevron = row.querySelector('.row-chevron');
+          if (!detail) return;
+          const isOpen = detail.style.display !== 'none';
+          detail.style.display = isOpen ? 'none' : '';
+          row.classList.toggle('row-expanded', !isOpen);
+          chevron.classList.toggle('chevron-open', !isOpen);
         });
       });
     }
