@@ -722,18 +722,29 @@
 
     .detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border2); overflow: hidden; }
     .detail-row { display: none; }
+    .detail-row.is-open { display: table-row; }
+
+    /* Outer clip wrapper — animates height via max-height */
+    .detail-row-inner {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity    0.20s ease;
+    }
+
+    .detail-row-inner.is-open {
+      max-height: 600px; /* generous ceiling — panel is never this tall */
+      opacity: 1;
+      transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity    0.24s ease;
+    }
 
     .detail-panel {
       display: flex;
       gap: 0;
       background: var(--bg);
       border-top: 1px solid var(--border2);
-      animation: detailIn .18s ease both;
-    }
-
-    @keyframes detailIn {
-      from { opacity: 0; transform: translateY(-4px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
 
     .detail-section {
@@ -1450,8 +1461,13 @@
 
       // 3. Try direct registry RDAP via IANA bootstrap first,
       //    then fall back to rdap.org proxy if bootstrap fails or TLD unknown.
-      const tld = domain.split('.').pop();
-      const registryBase = await getRDAPBase(tld);
+      //    Try the two-label suffix first (catches .co.uk, .com.au, .org.uk, etc.)
+      //    before falling back to the single TLD label.
+      const labels = domain.split('.');
+      const tld2   = labels.length >= 3 ? labels.slice(-2).join('.') : null;
+      const tld1   = labels[labels.length - 1];
+      const registryBase = (tld2 ? await getRDAPBase(tld2) : null)
+                        || await getRDAPBase(tld1);
 
       let result = await fetchRDAP(domain, registryBase);
 
@@ -1835,8 +1851,8 @@
       }
 
       // Pass 3: last resort — resolve the NS hostname to an IP and ask ipapi.co.
-      // Least reliable (may return the NS infrastructure owner, e.g. Cloudflare,
-      // rather than the domain's actual host), but better than nothing.
+      // Least reliable (may return the NS infrastructure owner rather than the
+      // domain's actual host), but better than nothing.
       for (const ns of nsNames.slice(0, 2)) {
         const ip = await resolveARecord(ns);
         if (!ip) continue;
@@ -1971,7 +1987,7 @@
           <td class="chevron-cell"><span class="row-chevron" aria-label="Expand details">›</span></td>
         </tr>
         <tr class="detail-row" id="detail-row-${rowIdx}">
-          <td colspan="7">${renderDetailPanel(r)}</td>
+          <td colspan="7"><div class="detail-row-inner">${renderDetailPanel(r)}</div></td>
         </tr>`);
       }
 
@@ -2223,23 +2239,31 @@
           const chevron = row.querySelector('.row-chevron');
           if (!detail) return;
 
-          const isOpen = detail.style.display === 'table-row';
+          const inner  = detail.querySelector('.detail-row-inner');
+          const isOpen = detail.classList.contains('is-open');
 
           if (isOpen) {
-            detail.style.display = 'none';
+            // Collapse: remove open class from inner first (starts transition),
+            // then hide the tr after the transition ends so it doesn't take up space.
+            inner.classList.remove('is-open');
             row.classList.remove('row-expanded');
             if (chevron) chevron.classList.remove('chevron-open');
+            const onDone = () => {
+              detail.classList.remove('is-open');
+              inner.removeEventListener('transitionend', onDone);
+            };
+            inner.addEventListener('transitionend', onDone);
           } else {
-            detail.style.display = 'table-row';
+            // Expand: show the tr first (so the browser can measure it),
+            // then on the next frame add the open class to trigger the transition.
+            detail.classList.add('is-open');
             row.classList.add('row-expanded');
             if (chevron) chevron.classList.add('chevron-open');
-            // Re-trigger entry animation
-            const panel = detail.querySelector('.detail-panel');
-            if (panel) {
-              panel.style.animation = 'none';
-              void panel.offsetWidth;
-              panel.style.animation = '';
-            }
+            // rAF ensures the tr is in the DOM and painted before the class is added,
+            // guaranteeing the transition fires rather than snapping instantly.
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => inner.classList.add('is-open'));
+            });
           }
         });
       });
