@@ -436,7 +436,30 @@
 
     tbody tr:hover { background: var(--surface2); }
 
-    .domain-cell { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; }
+    .domain-cell {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    /* scroll-inner inside domain-cell shrinks to fill remaining space */
+    .domain-cell .scroll-inner {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Badges stay pinned to the right, never scroll or clip */
+    .domain-cell .cache-badge,
+    .domain-cell .source-badge {
+      flex-shrink: 0;
+    }
+
     .domain-cell a { color: var(--accent); text-decoration: none; }
     .domain-cell a:hover { text-decoration: underline; }
 
@@ -485,7 +508,6 @@
     .scroll-cell {
       position: relative;
       overflow: hidden;
-      white-space: nowrap;
     }
 
     /* Fade mask on the right edge so text fades out instead of hard-clipping */
@@ -1725,7 +1747,7 @@
           : '';
 
         parts.push(`<tr>
-          <td class="domain-cell scroll-cell"><span class="scroll-inner">${domainCell}${sourceTag}${cacheTag}</span></td>
+          <td class="domain-cell scroll-cell"><span class="scroll-inner">${domainCell}</span>${sourceTag}${cacheTag}</td>
           <td>${statusBadge(r.status)}</td>
           <td>${renderEPPTags(r.eppCodes)}</td>
           <td class="registrar-cell">${escHtml(r.registrar)}</td>
