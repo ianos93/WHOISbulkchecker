@@ -499,8 +499,6 @@
     .registrar-cell {
       color: var(--para);
       font-size: 12px;
-      overflow: hidden;
-      white-space: nowrap;
     }
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
@@ -515,7 +513,7 @@
       content: '';
       position: absolute;
       top: 0; right: 0;
-      width: 24px; height: 100%;
+      width: 32px; height: 100%;
       background: linear-gradient(to right, transparent, var(--surface));
       pointer-events: none;
       transition: opacity .2s;
@@ -525,9 +523,34 @@
       background: linear-gradient(to right, transparent, var(--surface2));
     }
 
-    /* Hide fade when scrolled to end */
+    /* Hide right fade when scrolled to end */
     .scroll-cell.overflows.scrolled::after {
       opacity: 0;
+    }
+
+    /* Left fade mask — appears after scroll has started */
+    .scroll-cell.overflows::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 32px; height: 100%;
+      background: linear-gradient(to left, transparent, var(--surface));
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s;
+      z-index: 1;
+    }
+
+    tbody tr:hover .scroll-cell.overflows::before {
+      background: linear-gradient(to left, transparent, var(--surface2));
+    }
+
+    /* Show left fade once scrolling has begun */
+    .scroll-cell.overflows.scrolling::before {
+      opacity: 1;
+    }
+    .scroll-cell.overflows.scrolled::before {
+      opacity: 1;
     }
 
     .scroll-cell .scroll-inner {
@@ -557,28 +580,8 @@
     .epp-ok       { background: rgba(61,164,77,.10);   color: var(--green-lt);  border-color: rgba(61,164,77,.27); }
     .epp-neutral  { background: rgba(167,169,190,.08); color: var(--para);      border-color: rgba(167,169,190,.2); }
 
-    /* tooltip */
-    .epp-tag[data-tip]:hover::after {
-      content: attr(data-tip);
-      position: absolute;
-      bottom: calc(100% + 7px);
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      color: var(--text);
-      font-family: var(--font-sans);
-      font-size: 12px;
-      font-weight: 400;
-      padding: 8px 12px;
-      border-radius: 7px;
-      white-space: normal;
-      max-width: 240px;
-      z-index: 50;
-      box-shadow: 0 6px 20px rgba(0,0,0,.5);
-      pointer-events: none;
-      line-height: 1.5;
-    }
+    /* tooltip — disabled: hover effects removed from EPP flags column */
+    /* .epp-tag[data-tip]:hover::after { ... } */
 
     .expiry-soon { color: var(--yellow); }
     .expiry-old  { color: var(--para); }
@@ -684,8 +687,6 @@
     .host-cell {
       color: var(--para);
       font-size: 12px;
-      overflow: hidden;
-      white-space: nowrap;
     }
 
     @media (max-width: 640px) {
@@ -719,7 +720,9 @@
     .data-row.row-expanded { background: var(--surface2); }
     .data-row.row-expanded td { border-bottom: none; }
 
-    .detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border2); }
+    .detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border2); overflow: hidden; }
+    .detail-row { display: none; }
+    .detail-row.row-open { display: table-row; }
 
     .detail-panel {
       display: flex;
@@ -1935,7 +1938,7 @@
           <td class="host-cell scroll-cell">${renderHostingCell(r)}</td>
           <td class="chevron-cell"><span class="row-chevron" aria-label="Expand details">›</span></td>
         </tr>
-        <tr class="detail-row" id="detail-row-${rowIdx}" style="display:none">
+        <tr class="detail-row" id="detail-row-${rowIdx}">
           <td colspan="7">${renderDetailPanel(r)}</td>
         </tr>`);
       }
@@ -2005,18 +2008,24 @@
         // Reset any previous animation state
         inner.style.transition = 'none';
         inner.style.transform  = 'translateX(0)';
-        cell.classList.remove('overflows', 'scrolled');
+        cell.classList.remove('overflows', 'scrolled', 'scrolling');
 
         // Must read layout after reset — use rAF to let browser flush
         requestAnimationFrame(() => {
-          const cellW  = cell.clientWidth;
-          const innerW = inner.scrollWidth;
+          // Use offsetWidth minus horizontal padding to get the true content width
+          // This prevents left-side clipping when the cell IS the td element
+          const style   = getComputedStyle(cell);
+          const padL    = parseFloat(style.paddingLeft)  || 0;
+          const padR    = parseFloat(style.paddingRight) || 0;
+          const cellW   = cell.clientWidth - padL - padR;
+          const innerW  = inner.scrollWidth;
           const overflow = innerW - cellW;
 
           if (overflow <= 2) return; // fits, nothing to do
 
           cell.classList.add('overflows');
-          const dist = overflow; // px to scroll left
+          // Overshoot by 8px so the rightmost character is fully visible (not faded)
+          const dist = overflow + 8;
 
           // Animate on hover using JS timers for full control
           let animTimer = null;
@@ -2026,9 +2035,10 @@
             cell.classList.remove('scrolled');
             // Small delay before starting so fast mouse-overs don't flicker
             animTimer = setTimeout(() => {
+              cell.classList.add('scrolling');
               inner.style.transition = `transform ${Math.max(1.2, dist / 60)}s ease-in-out`;
               inner.style.transform  = `translateX(-${dist}px)`;
-              // Mark as scrolled when animation ends so fade hides
+              // Mark as scrolled when animation ends so right fade hides
               const dur = Math.max(1.2, dist / 60) * 1000;
               animTimer = setTimeout(() => cell.classList.add('scrolled'), dur);
             }, 300);
@@ -2036,7 +2046,7 @@
 
           cell.addEventListener('mouseleave', () => {
             clearTimeout(animTimer);
-            cell.classList.remove('scrolled');
+            cell.classList.remove('scrolled', 'scrolling');
             inner.style.transition = 'transform .4s ease';
             inner.style.transform  = 'translateX(0)';
           });
@@ -2096,10 +2106,26 @@
           const detail  = document.getElementById(`detail-row-${idx}`);
           const chevron = row.querySelector('.row-chevron');
           if (!detail) return;
-          const isOpen = detail.style.display !== 'none';
-          detail.style.display = isOpen ? 'none' : '';
-          row.classList.toggle('row-expanded', !isOpen);
-          chevron.classList.toggle('chevron-open', !isOpen);
+          const isOpen = detail.classList.contains('row-open');
+          if (isOpen) {
+            detail.classList.remove('row-open');
+            row.classList.remove('row-expanded');
+            chevron.classList.remove('chevron-open');
+          } else {
+            // Force animation re-trigger by briefly removing and re-adding the panel
+            const panel = detail.querySelector('.detail-panel');
+            if (panel) {
+              panel.style.animation = 'none';
+              detail.classList.add('row-open');
+              // Trigger reflow then re-enable animation
+              void panel.offsetWidth;
+              panel.style.animation = '';
+            } else {
+              detail.classList.add('row-open');
+            }
+            row.classList.add('row-expanded');
+            chevron.classList.add('chevron-open');
+          }
         });
       });
     }
