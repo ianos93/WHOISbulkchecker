@@ -90,7 +90,7 @@
     .wrap {
       position: relative;
       z-index: 1;
-      max-width: 960px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 52px 28px 80px;
     }
@@ -394,12 +394,12 @@
     }
 
     /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting */
-    table th:nth-child(1), table td:nth-child(1) { width: 18%; }
-    table th:nth-child(2), table td:nth-child(2) { width: 11%; }
-    table th:nth-child(3), table td:nth-child(3) { width: 24%; }
-    table th:nth-child(4), table td:nth-child(4) { width: 16%; }
-    table th:nth-child(5), table td:nth-child(5) { width: 10%; }
-    table th:nth-child(6), table td:nth-child(6) { width: 21%; }
+    table th:nth-child(1), table td:nth-child(1) { width: 17%; }
+    table th:nth-child(2), table td:nth-child(2) { width: 10%; }
+    table th:nth-child(3), table td:nth-child(3) { width: 23%; }
+    table th:nth-child(4), table td:nth-child(4) { width: 18%; }
+    table th:nth-child(5), table td:nth-child(5) { width: 9%; }
+    table th:nth-child(6), table td:nth-child(6) { width: 23%; }
 
     thead { background: var(--surface2); }
 
@@ -481,7 +481,34 @@
     }
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
-    /* ── EPP STATUS TAGS ── */
+    /* ── TRUNCATION TOOLTIP ── */
+    /* Shown on any td/cell that has a data-full attribute and is overflowing */
+    .has-tip {
+      position: relative;
+      cursor: default;
+    }
+
+    .has-tip[data-full]:hover::after {
+      content: attr(data-full);
+      position: absolute;
+      bottom: calc(100% + 7px);
+      left: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 400;
+      padding: 7px 11px;
+      border-radius: 7px;
+      white-space: nowrap;
+      z-index: 50;
+      box-shadow: 0 6px 20px rgba(0,0,0,.5);
+      pointer-events: none;
+      line-height: 1.5;
+    }
+
+
     .epp-wrap { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; }
 
     .epp-tag {
@@ -1697,10 +1724,10 @@
           : '';
 
         parts.push(`<tr>
-          <td class="domain-cell">${domainCell}${sourceTag}${cacheTag}</td>
+          <td class="domain-cell has-tip" data-full="${escAttr(r.domain)}">${domainCell}${sourceTag}${cacheTag}</td>
           <td>${statusBadge(r.status)}</td>
           <td>${renderEPPTags(r.eppCodes)}</td>
-          <td class="registrar-cell" title="${escAttr(r.registrar)}">${escHtml(r.registrar)}</td>
+          <td class="registrar-cell has-tip" data-full="${escAttr(r.registrar)}">${escHtml(r.registrar)}</td>
           <td class="expiry-cell">${expiryCell(r.expiry)}</td>
           <td class="host-cell">${renderHostingCell(r)}</td>
         </tr>`);
@@ -1762,7 +1789,7 @@
         // registered but lookup still in progress or failed
         return `<span style="color:var(--muted);font-size:11px">—</span>`;
       }
-      return `<span class="host-badge" title="${escAttr(r.hostingProvider)}">
+      return `<span class="host-badge has-tip" data-full="${escAttr(r.hostingProvider)}">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         ${escHtml(r.hostingProvider)}
       </span>`;
