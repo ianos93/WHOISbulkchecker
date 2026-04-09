@@ -394,12 +394,12 @@
     }
 
     /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting */
-    table th:nth-child(1), table td:nth-child(1) { width: 22%; }
-    table th:nth-child(2), table td:nth-child(2) { width: 10%; }
-    table th:nth-child(3), table td:nth-child(3) { width: 22%; }
-    table th:nth-child(4), table td:nth-child(4) { width: 18%; }
-    table th:nth-child(5), table td:nth-child(5) { width: 9%; }
-    table th:nth-child(6), table td:nth-child(6) { width: 19%; }
+    table th:nth-child(1), table td:nth-child(1) { width: 18%; }
+    table th:nth-child(2), table td:nth-child(2) { width: 11%; }
+    table th:nth-child(3), table td:nth-child(3) { width: 24%; }
+    table th:nth-child(4), table td:nth-child(4) { width: 16%; }
+    table th:nth-child(5), table td:nth-child(5) { width: 10%; }
+    table th:nth-child(6), table td:nth-child(6) { width: 21%; }
 
     thead { background: var(--surface2); }
 
@@ -418,6 +418,7 @@
       padding: 12px 16px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
+      overflow: hidden;
     }
 
     tbody tr:last-child td { border-bottom: none; }
@@ -481,7 +482,7 @@
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
     /* ── EPP STATUS TAGS ── */
-    .epp-wrap { display: flex; flex-wrap: wrap; gap: 4px; max-width: 300px; }
+    .epp-wrap { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; }
 
     .epp-tag {
       font-family: var(--font-mono);
