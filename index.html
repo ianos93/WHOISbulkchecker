@@ -1431,71 +1431,136 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // HOSTING PROVIDER DETECTION  (DNS → NS IP → ASN → org name)
-    // Uses Cloudflare DoH for NS resolution (no CORS issues, fast, privacy-friendly)
-    // then ip-api.com (free, no key, 45 req/min) for IP→org lookup.
-    // Results cached alongside RDAP data to avoid redundant lookups.
+    // HOSTING PROVIDER DETECTION
+    // Strategy:
+    //   1. Resolve NS records via Cloudflare DoH (browser-safe, no CORS issues)
+    //   2. Match the NS hostname against a known-provider pattern table (instant, no API)
+    //   3. If no pattern match, fall back to ipapi.co for IP→org (CORS-enabled, free)
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Small in-memory cache for IP→org lookups so shared NS IPs aren't re-fetched
+    // Pattern table: regex tested against NS hostnames → provider label
+    // Ordered most-specific first.
+    const NS_PROVIDER_PATTERNS = [
+      [/\.cloudflare\.com$/,          'Cloudflare'],
+      [/\.awsdns[-\w]*\.(com|net|org|co\.uk)$/, 'Amazon Route 53'],
+      [/\.googledomains\.com$/,        'Google Domains DNS'],
+      [/\.google\.com$/,               'Google Cloud DNS'],
+      [/\.azure[-\w]*\.com$/,          'Azure DNS'],
+      [/\.azure[-\w]*\.net$/,          'Azure DNS'],
+      [/\.nsone\.net$/,                'NS1'],
+      [/\.dynect\.net$/,               'Dyn / Oracle'],
+      [/\.ultradns\.(net|com|org|biz)$/, 'UltraDNS'],
+      [/\.dnsimple\.com$/,             'DNSimple'],
+      [/\.dnsmadeeasy\.com$/,          'DNS Made Easy'],
+      [/\.domaincontrol\.com$/,        'GoDaddy'],
+      [/\.godaddy\.com$/,              'GoDaddy'],
+      [/\.secureserver\.net$/,         'GoDaddy'],
+      [/\.namecheap(hosting)?\.com$/,  'Namecheap'],
+      [/\.registrar-servers\.com$/,    'Namecheap'],
+      [/\.name\.com$/,                 'Name.com'],
+      [/\.hover\.com$/,                'Hover'],
+      [/\.porkbun\.com$/,              'Porkbun'],
+      [/\.gandi\.net$/,                'Gandi'],
+      [/\.ovh\.net$/,                  'OVH'],
+      [/\.ovh\.com$/,                  'OVH'],
+      [/\.hetzner\.com$/,              'Hetzner'],
+      [/\.digitalocean\.com$/,         'DigitalOcean'],
+      [/\.linode\.com$/,               'Linode / Akamai'],
+      [/\.vultr\.com$/,                'Vultr'],
+      [/\.netlify\.com$/,              'Netlify'],
+      [/\.vercel-dns\.com$/,           'Vercel'],
+      [/\.squarespace\.com$/,          'Squarespace'],
+      [/\.wixdns\.net$/,               'Wix'],
+      [/\.shopify\.com$/,              'Shopify'],
+      [/\.webflow\.com$/,              'Webflow'],
+      [/\.wordpress\.com$/,            'WordPress.com'],
+      [/\.bluehost\.com$/,             'Bluehost'],
+      [/\.hostgator\.com$/,            'HostGator'],
+      [/\.siteground\.net$/,           'SiteGround'],
+      [/\.dreamhost\.com$/,            'DreamHost'],
+      [/\.pair\.com$/,                 'pair Networks'],
+      [/\.ionos\.com$/,                'IONOS'],
+      [/\.1and1\.com$/,                'IONOS'],
+      [/\.strato\.de$/,                'Strato'],
+      [/\.rackspace\.com$/,            'Rackspace'],
+      [/\.bunny\.net$/,                'Bunny DNS'],
+      [/\.cdn77\.org$/,                'CDN77'],
+      [/\.fastly\.net$/,               'Fastly'],
+      [/\.akamai(tech)?\.net$/,        'Akamai'],
+    ];
+
+    function matchNSProvider(nsHostname) {
+      for (const [pattern, label] of NS_PROVIDER_PATTERNS) {
+        if (pattern.test(nsHostname)) return label;
+      }
+      return null;
+    }
+
+    // In-memory cache for IP→org lookups (ipapi.co fallback)
     const _ipOrgCache = new Map();
 
-    async function resolveNSIPs(domain) {
+    async function resolveNSNames(domain) {
       try {
         const res = await fetch(
           `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
-          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
+          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(6000) }
         );
         if (!res.ok) return [];
         const json = await res.json();
-        const nsNames = (json.Answer || [])
-          .filter(r => r.type === 2) // NS record type
-          .map(r => r.data.replace(/\.$/, '').toLowerCase())
-          .slice(0, 2); // Only need first 2 NS to identify the provider
-
-        // Resolve each NS hostname to an IP (type=A)
-        const ips = [];
-        for (const ns of nsNames) {
-          try {
-            const r2 = await fetch(
-              `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(ns)}&type=A`,
-              { headers: { Accept: 'application/dns-json' }, signal: makeSignal(4000) }
-            );
-            if (!r2.ok) continue;
-            const j2 = await r2.json();
-            const ip = (j2.Answer || []).find(rec => rec.type === 1)?.data;
-            if (ip) ips.push(ip);
-          } catch { /* skip this NS */ }
-        }
-        return ips;
+        return (json.Answer || [])
+          .filter(r => r.type === 2)
+          .map(r => r.data.replace(/\.$/, '').toLowerCase());
       } catch { return []; }
+    }
+
+    async function resolveARecord(hostname) {
+      try {
+        const res = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
+        );
+        if (!res.ok) return null;
+        const json = await res.json();
+        return (json.Answer || []).find(r => r.type === 1)?.data || null;
+      } catch { return null; }
     }
 
     async function ipToOrg(ip) {
       if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
       try {
+        // ipapi.co supports CORS for browser requests (unlike ip-api.com)
         const res = await fetch(
-          `https://ip-api.com/json/${ip}?fields=org,isp,as`,
+          `https://ipapi.co/${ip}/org/`,
           { signal: makeSignal(5000) }
         );
         if (!res.ok) { _ipOrgCache.set(ip, null); return null; }
-        const json = await res.json();
-        // Prefer org over isp; strip leading AS number from org field
-        let name = json.org || json.isp || null;
-        if (name) name = name.replace(/^AS\d+\s+/i, '').trim();
+        const text = (await res.text()).trim();
+        // Response is plain text like "AS13335 Cloudflare, Inc."
+        // Strip the leading ASN token
+        const name = text.replace(/^AS\d+\s+/i, '').trim() || null;
         _ipOrgCache.set(ip, name);
         return name;
       } catch { _ipOrgCache.set(ip, null); return null; }
     }
 
     async function detectHostingProvider(domain) {
-      const ips = await resolveNSIPs(domain);
-      if (!ips.length) return null;
-      // Use the first IP that resolves to an org
-      for (const ip of ips) {
+      const nsNames = await resolveNSNames(domain);
+      if (!nsNames.length) return null;
+
+      // Pass 1: pattern match on NS hostname (fast, no extra requests)
+      for (const ns of nsNames) {
+        const label = matchNSProvider(ns);
+        if (label) return label;
+      }
+
+      // Pass 2: resolve one NS to an IP and ask ipapi.co (CORS-safe)
+      for (const ns of nsNames.slice(0, 2)) {
+        const ip = await resolveARecord(ns);
+        if (!ip) continue;
         const org = await ipToOrg(ip);
         if (org) return org;
       }
+
       return null;
     }
 
