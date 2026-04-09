@@ -394,11 +394,11 @@
     }
 
     /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting */
-    table th:nth-child(1), table td:nth-child(1) { width: 17%; }
-    table th:nth-child(2), table td:nth-child(2) { width: 10%; }
-    table th:nth-child(3), table td:nth-child(3) { width: 23%; }
-    table th:nth-child(4), table td:nth-child(4) { width: 18%; }
-    table th:nth-child(5), table td:nth-child(5) { width: 9%; }
+    table th:nth-child(1), table td:nth-child(1) { width: 16%; }
+    table th:nth-child(2), table td:nth-child(2) { width: 12%; }
+    table th:nth-child(3), table td:nth-child(3) { width: 21%; }
+    table th:nth-child(4), table td:nth-child(4) { width: 17%; }
+    table th:nth-child(5), table td:nth-child(5) { width: 11%; }
     table th:nth-child(6), table td:nth-child(6) { width: 23%; }
 
     thead { background: var(--surface2); }
@@ -436,7 +436,7 @@
 
     tbody tr:hover { background: var(--surface2); }
 
-    .domain-cell { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .domain-cell { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; }
     .domain-cell a { color: var(--accent); text-decoration: none; }
     .domain-cell a:hover { text-decoration: underline; }
 
@@ -481,31 +481,24 @@
     }
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
-    /* ── TRUNCATION TOOLTIP ── */
-    /* Shown on any td/cell that has a data-full attribute and is overflowing */
-    .has-tip {
+    /* ── SCROLL-ON-HOVER for truncated cells ── */
+    /* The inner span slides left on hover to reveal the full text */
+    .scroll-cell {
       position: relative;
-      cursor: default;
+      overflow: hidden;
+      white-space: nowrap;
     }
 
-    .has-tip[data-full]:hover::after {
-      content: attr(data-full);
-      position: absolute;
-      bottom: calc(100% + 7px);
-      left: 0;
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      color: var(--text);
-      font-family: var(--font-sans);
-      font-size: 12px;
-      font-weight: 400;
-      padding: 7px 11px;
-      border-radius: 7px;
+    .scroll-cell .scroll-inner {
+      display: inline-block;
       white-space: nowrap;
-      z-index: 50;
-      box-shadow: 0 6px 20px rgba(0,0,0,.5);
-      pointer-events: none;
-      line-height: 1.5;
+      transition: none;
+    }
+
+    .scroll-cell:hover .scroll-inner {
+      /* JS sets --scroll-dist dynamically; fallback 0 = no scroll if not overflowing */
+      transform: translateX(var(--scroll-dist, 0px));
+      transition: transform 1.8s ease-in-out;
     }
 
 
@@ -656,10 +649,8 @@
     .host-cell {
       color: var(--para);
       font-size: 12px;
-      max-width: 0;
-      white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .host-badge {
@@ -674,9 +665,6 @@
       border: 1px solid rgba(167,169,190,.18);
       color: var(--para);
       white-space: nowrap;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
     .host-badge svg { flex-shrink: 0; opacity: .6; }
@@ -1724,12 +1712,12 @@
           : '';
 
         parts.push(`<tr>
-          <td class="domain-cell has-tip" data-full="${escAttr(r.domain)}">${domainCell}${sourceTag}${cacheTag}</td>
+          <td class="domain-cell scroll-cell"><span class="scroll-inner">${domainCell}${sourceTag}${cacheTag}</span></td>
           <td>${statusBadge(r.status)}</td>
           <td>${renderEPPTags(r.eppCodes)}</td>
-          <td class="registrar-cell has-tip" data-full="${escAttr(r.registrar)}">${escHtml(r.registrar)}</td>
+          <td class="registrar-cell">${escHtml(r.registrar)}</td>
           <td class="expiry-cell">${expiryCell(r.expiry)}</td>
-          <td class="host-cell">${renderHostingCell(r)}</td>
+          <td class="host-cell scroll-cell">${renderHostingCell(r)}</td>
         </tr>`);
       }
 
@@ -1747,6 +1735,8 @@
             <tbody>${tbody}</tbody>
           </table>
         </div>`;
+      // Measure overflow after DOM is updated so scroll distances are accurate
+      requestAnimationFrame(applyScrollDistances);
     }
 
     function renderEPPTags(codes) {
@@ -1789,10 +1779,24 @@
         // registered but lookup still in progress or failed
         return `<span style="color:var(--muted);font-size:11px">—</span>`;
       }
-      return `<span class="host-badge has-tip" data-full="${escAttr(r.hostingProvider)}">
+      return `<span class="scroll-inner"><span class="host-badge">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         ${escHtml(r.hostingProvider)}
-      </span>`;
+      </span></span>`;
+    }
+
+    function applyScrollDistances() {
+      document.querySelectorAll('.scroll-cell').forEach(cell => {
+        const inner = cell.querySelector('.scroll-inner');
+        if (!inner) return;
+        const overflow = inner.scrollWidth - cell.clientWidth;
+        if (overflow > 0) {
+          cell.style.setProperty('--scroll-dist', `-${overflow}px`);
+          cell.style.cursor = 'default';
+        } else {
+          cell.style.setProperty('--scroll-dist', '0px');
+        }
+      });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
