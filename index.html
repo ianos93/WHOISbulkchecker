@@ -482,23 +482,36 @@
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
     /* ── SCROLL-ON-HOVER for truncated cells ── */
-    /* The inner span slides left on hover to reveal the full text */
     .scroll-cell {
       position: relative;
       overflow: hidden;
       white-space: nowrap;
     }
 
+    /* Fade mask on the right edge so text fades out instead of hard-clipping */
+    .scroll-cell.overflows::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 24px; height: 100%;
+      background: linear-gradient(to right, transparent, var(--surface));
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+
+    tbody tr:hover .scroll-cell.overflows::after {
+      background: linear-gradient(to right, transparent, var(--surface2));
+    }
+
+    /* Hide fade when scrolled to end */
+    .scroll-cell.overflows.scrolled::after {
+      opacity: 0;
+    }
+
     .scroll-cell .scroll-inner {
       display: inline-block;
       white-space: nowrap;
-      transition: none;
-    }
-
-    .scroll-cell:hover .scroll-inner {
-      /* JS sets --scroll-dist dynamically; fallback 0 = no scroll if not overflowing */
-      transform: translateX(var(--scroll-dist, 0px));
-      transition: transform 1.8s ease-in-out;
+      will-change: transform;
     }
 
 
@@ -1789,13 +1802,46 @@
       document.querySelectorAll('.scroll-cell').forEach(cell => {
         const inner = cell.querySelector('.scroll-inner');
         if (!inner) return;
-        const overflow = inner.scrollWidth - cell.clientWidth;
-        if (overflow > 0) {
-          cell.style.setProperty('--scroll-dist', `-${overflow}px`);
-          cell.style.cursor = 'default';
-        } else {
-          cell.style.setProperty('--scroll-dist', '0px');
-        }
+
+        // Reset any previous animation state
+        inner.style.transition = 'none';
+        inner.style.transform  = 'translateX(0)';
+        cell.classList.remove('overflows', 'scrolled');
+
+        // Must read layout after reset — use rAF to let browser flush
+        requestAnimationFrame(() => {
+          const cellW  = cell.clientWidth;
+          const innerW = inner.scrollWidth;
+          const overflow = innerW - cellW;
+
+          if (overflow <= 2) return; // fits, nothing to do
+
+          cell.classList.add('overflows');
+          const dist = overflow; // px to scroll left
+
+          // Animate on hover using JS timers for full control
+          let animTimer = null;
+
+          cell.addEventListener('mouseenter', () => {
+            clearTimeout(animTimer);
+            cell.classList.remove('scrolled');
+            // Small delay before starting so fast mouse-overs don't flicker
+            animTimer = setTimeout(() => {
+              inner.style.transition = `transform ${Math.max(1.2, dist / 60)}s ease-in-out`;
+              inner.style.transform  = `translateX(-${dist}px)`;
+              // Mark as scrolled when animation ends so fade hides
+              const dur = Math.max(1.2, dist / 60) * 1000;
+              animTimer = setTimeout(() => cell.classList.add('scrolled'), dur);
+            }, 300);
+          });
+
+          cell.addEventListener('mouseleave', () => {
+            clearTimeout(animTimer);
+            cell.classList.remove('scrolled');
+            inner.style.transition = 'transform .4s ease';
+            inner.style.transform  = 'translateX(0)';
+          });
+        });
       });
     }
 
