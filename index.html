@@ -1016,7 +1016,6 @@
     </header>
     <p class="tagline">Check domain registration status and EPP flags in bulk — any number of domains, processed in batches</p>
 
-    <!-- INFO PANEL -->
     <div class="info-panel" id="infoPanel">
       <div class="info-grid">
 
@@ -1081,7 +1080,6 @@
     <div class="card">
       <div class="card-label">Domain List</div>
 
-      <!-- DROP ZONE -->
       <div class="drop-zone" id="dropZone"
            role="button"
            tabindex="0"
@@ -1113,13 +1111,11 @@
       </div>
     </div>
 
-    <!-- CACHE INFO -->
     <div class="cache-bar">
       <span id="cacheInfo" style="opacity:.4">Cache empty</span>
       <button class="btn-cache-clear" id="cacheClearBtn">Clear cache</button>
     </div>
 
-    <!-- PROGRESS -->
     <div class="progress-wrap" id="progressWrap" role="region" aria-label="Check progress">
       <div class="progress-header" aria-live="polite" aria-atomic="true">
         <span id="progressLabel">Checking...</span>
@@ -1137,7 +1133,6 @@
       </div>
     </div>
 
-    <!-- STATS -->
     <div class="stats-row" id="statsRow" style="display:none">
       <div class="stat-pill all"><span class="dot dot-muted"></span><span id="statTotal">0</span> total</div>
       <div class="stat-pill reg"><span class="dot dot-red"></span><span id="statReg">0</span> registered</div>
@@ -1145,7 +1140,6 @@
       <div class="stat-pill err"><span class="dot dot-yellow"></span><span id="statErr">0</span> errors</div>
     </div>
 
-    <!-- FILTERS -->
     <div class="filter-section" id="filterSection" style="display:none">
       <div class="filter-group">
         <div class="filter-group-label">Status</div>
@@ -1159,12 +1153,10 @@
       <div class="filter-group" id="eppFilterGroup" style="display:none">
         <div class="filter-group-label">EPP Flag</div>
         <div class="filter-bar" id="eppFilterBar">
-          <!-- populated dynamically -->
-        </div>
+          </div>
       </div>
     </div>
 
-    <!-- TABLE -->
     <div id="tableContainer">
       <div class="empty-state">
         <div class="icon">🔍</div>
@@ -1193,6 +1185,7 @@
     let currentStatusFilter = 'all';
     let currentEPPFilter   = null;
     let running            = false;
+    let renderRafId        = null;
 
     // ─────────────────────────────────────────────────────────────────────────
     // CONSTANTS
@@ -1970,8 +1963,15 @@
             <tbody>${tbody}</tbody>
           </table>
         </div>`;
+
+      // Cancel any previously queued frame before requesting a new one
+      if (renderRafId) cancelAnimationFrame(renderRafId);
+
       // Measure overflow after DOM is updated so scroll distances are accurate
-      requestAnimationFrame(() => { applyScrollDistances(); wireDetailRows(); });
+      renderRafId = requestAnimationFrame(() => { 
+        applyScrollDistances(); 
+        wireDetailRows(); 
+      });
     }
 
     function renderEPPTags(codes) {
