@@ -393,13 +393,13 @@
       table-layout: fixed;
     }
 
-    /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting */
-    table th:nth-child(1), table td:nth-child(1) { width: 16%; }
-    table th:nth-child(2), table td:nth-child(2) { width: 12%; }
-    table th:nth-child(3), table td:nth-child(3) { width: 21%; }
+    /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting | Chevron */
+    table th:nth-child(1), table td:nth-child(1) { width: 20%; }
+    table th:nth-child(2), table td:nth-child(2) { width: 11%; }
+    table th:nth-child(3), table td:nth-child(3) { width: 19%; }
     table th:nth-child(4), table td:nth-child(4) { width: 17%; }
-    table th:nth-child(5), table td:nth-child(5) { width: 11%; }
-    table th:nth-child(6), table td:nth-child(6) { width: 23%; }
+    table th:nth-child(5), table td:nth-child(5) { width: 10%; }
+    table th:nth-child(6), table td:nth-child(6) { width: 20%; }
 
     thead { background: var(--surface2); }
 
@@ -499,10 +499,8 @@
     .registrar-cell {
       color: var(--para);
       font-size: 12px;
-      max-width: 0;
-      white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
 
@@ -689,22 +687,6 @@
       overflow: hidden;
       white-space: nowrap;
     }
-
-    .host-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 5px;
-      background: rgba(167,169,190,.07);
-      border: 1px solid rgba(167,169,190,.18);
-      color: var(--para);
-      white-space: nowrap;
-    }
-
-    .host-badge svg { flex-shrink: 0; opacity: .6; }
 
     @media (max-width: 640px) {
       th:nth-child(4), td:nth-child(4),
@@ -1938,7 +1920,8 @@
           ? `<span class="cache-badge" title="Loaded from local cache (24 h TTL)">cached</span>`
           : '';
 
-        parts.push(`<tr class="data-row" data-domain="${escAttr(r.domain)}" data-idx="${parts.length}">
+        const rowIdx = parts.length;
+        parts.push(`<tr class="data-row" data-idx="${rowIdx}">
           <td class="domain-cell">
             <div class="domain-cell-inner">
               <span class="scroll-cell"><span class="scroll-inner">${domainCell}</span></span>
@@ -1947,12 +1930,12 @@
           </td>
           <td>${statusBadge(r.status)}</td>
           <td>${renderEPPTags(r.eppCodes)}</td>
-          <td class="registrar-cell">${escHtml(r.registrar)}</td>
+          <td class="registrar-cell scroll-cell"><span class="scroll-inner">${escHtml(r.registrar)}</span></td>
           <td class="expiry-cell">${expiryCell(r.expiry)}</td>
           <td class="host-cell scroll-cell">${renderHostingCell(r)}</td>
           <td class="chevron-cell"><span class="row-chevron" aria-label="Expand details">›</span></td>
         </tr>
-        <tr class="detail-row" id="detail-${escAttr(r.domain)}" style="display:none">
+        <tr class="detail-row" id="detail-row-${rowIdx}" style="display:none">
           <td colspan="7">${renderDetailPanel(r)}</td>
         </tr>`);
       }
@@ -2006,19 +1989,12 @@
 
     function renderHostingCell(r) {
       if (r.status === 'pending') {
-        return `<span style="color:var(--muted);font-size:12px">…</span>`;
+        return `<span class="scroll-inner" style="color:var(--muted);font-size:12px">…</span>`;
       }
-      if (r.status !== 'registered') {
-        return `<span style="color:var(--muted);font-size:11px">—</span>`;
+      if (r.status !== 'registered' || !r.hostingProvider) {
+        return `<span class="scroll-inner" style="color:var(--muted);font-size:11px">—</span>`;
       }
-      if (r.hostingProvider === undefined || r.hostingProvider === null) {
-        // registered but lookup still in progress or failed
-        return `<span style="color:var(--muted);font-size:11px">—</span>`;
-      }
-      return `<span class="scroll-inner"><span class="host-badge">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        ${escHtml(r.hostingProvider)}
-      </span></span>`;
+      return `<span class="scroll-inner">${escHtml(r.hostingProvider)}</span>`;
     }
 
     function applyScrollDistances() {
@@ -2116,8 +2092,8 @@
     function wireDetailRows() {
       $('tableContainer').querySelectorAll('.data-row').forEach(row => {
         row.addEventListener('click', () => {
-          const domain  = row.dataset.domain;
-          const detail  = document.getElementById(`detail-${domain}`);
+          const idx     = row.dataset.idx;
+          const detail  = document.getElementById(`detail-row-${idx}`);
           const chevron = row.querySelector('.row-chevron');
           if (!detail) return;
           const isOpen = detail.style.display !== 'none';
