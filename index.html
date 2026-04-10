@@ -1231,16 +1231,6 @@
       // 2. Strip leading www.
       d = d.replace(/^www\./, '');
 
-      // 2a. Normalise Unicode/IDN labels to ASCII punycode via the URL constructor
-      //     Only attempt if the string contains non-ASCII characters.
-      if (/[^\x00-\x7F]/.test(d)) {
-        try {
-          d = new URL('https://' + d).hostname;
-        } catch {
-          return { ok: false, reason: 'invalid IDN label' };
-        }
-      }
-
       // 3. Skip blank lines and comment lines
       if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
 
@@ -1811,29 +1801,16 @@
     }
 
     async function detectHostingProvider(domain) {
-      // Kick off NS resolution and domain A-record lookup in parallel
-      const [nsNames, domainIP] = await Promise.all([
-        resolveNSNames(domain),
-        resolveARecord(domain),
-      ]);
+      const nsNames = await resolveNSNames(domain);
+      if (!nsNames.length) return null;
 
-      // Pass 1: domain's own A record -> ipapi.co (most accurate - reflects
-      // the actual web host, not the nameserver infrastructure).
-      if (domainIP) {
-        const info = await ipToOrg(domainIP);
-        if (info?.org) return info;
-      }
-
-      // Pass 2: pattern-match the NS hostnames (fast, no extra requests).
-      // Fires when the domain has no A record (parked, MX-only, etc.).
+      // Pass 1: pattern match on NS hostname (fast, no extra requests)
       for (const ns of nsNames) {
         const label = matchNSProvider(ns);
         if (label) return { org: label, asn: null, abuse: null };
       }
 
-      // Pass 3: last resort - resolve the NS hostname to an IP and ask ipapi.co.
-      // Still there as a catch-all but can no longer falsely report Cloudflare
-      // for domains using Cloudflare-backed parking NS servers.
+      // Pass 2: resolve one NS to an IP and ask ipapi.co (CORS-safe)
       for (const ns of nsNames.slice(0, 2)) {
         const ip = await resolveARecord(ns);
         if (!ip) continue;
