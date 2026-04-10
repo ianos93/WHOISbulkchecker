@@ -1281,7 +1281,12 @@
       // 8. Resolve apex domain via PSL — strips subdomains so we always
       //    look up the registrable domain (e.g. blog.example.co.uk → example.co.uk).
       //    If PSL isn't loaded yet, fall back to the full validated hostname.
-      const apex = getApexDomain(d) || d;
+      //    If getApexDomain returns null the input IS a public suffix (e.g. "co.uk")
+      //    — reject it as not a registrable domain.
+      const apex = getApexDomain(d);
+      if (apex === null) {
+        return { ok: false, reason: _pslExact ? 'input is a public suffix, not a registrable domain' : 'no TLD recognised' };
+      }
 
       return { ok: true, domain: apex, submitted: d };
     }
@@ -1852,7 +1857,7 @@
     // Strategy:
     //   1. Resolve NS records via Cloudflare DoH (browser-safe, no CORS issues)
     //   2. Match the NS hostname against a known-provider pattern table (instant, no API)
-    //   3. If no pattern match, fall back to ipapi.co for IP→org (CORS-enabled, free)
+    //   3. If no pattern match, fall back to ip-api.com for IP→org (CORS-enabled, 45 req/min free)
     // ─────────────────────────────────────────────────────────────────────────
 
     // Pattern table: regex tested against NS hostnames → provider label
@@ -1904,6 +1909,16 @@
       [/\.cdn77\.org$/,                'CDN77'],
       [/\.fastly\.net$/,               'Fastly'],
       [/\.akamai(tech)?\.net$/,        'Akamai'],
+      // Parking / inactive
+      [/\.dns-parking\.com$/,          'DNS Parking'],
+      [/\.parkingcrew\.net$/,          'ParkingCrew'],
+      [/\.sedoparking\.com$/,          'Sedo Parking'],
+      [/\.above\.com$/,                'Above.com Parking'],
+      [/\.bodis\.com$/,                'Bodis Parking'],
+      [/\.hugedomains\.com$/,          'HugeDomains'],
+      [/\.afternic\.com$/,             'Afternic'],
+      [/\.sav\.com$/,                  'Sav Parking'],
+      [/\.domainpark\.com$/,           'DomainPark'],
     ];
 
     function matchNSProvider(nsHostname) {
@@ -1913,7 +1928,7 @@
       return null;
     }
 
-    // In-memory cache for IP→org lookups (ipapi.co fallback)
+    // In-memory cache for IP→org lookups
     const _ipOrgCache = new Map();
 
     async function resolveNSNames(domain) {
@@ -1945,18 +1960,22 @@
     async function ipToOrg(ip) {
       if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
       try {
+        // ip-api.com: CORS-enabled, 45 req/min free, no key needed.
+        // Fields param limits response size and avoids unused data.
         const res = await fetch(
-          `https://ipapi.co/${ip}/json/`,
+          `https://ip-api.com/json/${ip}?fields=status,org,as,isp`,
           { signal: makeSignal(5000) }
         );
         if (!res.ok) { _ipOrgCache.set(ip, null); return null; }
         const json = await res.json();
-        let org = json.org || null;
+        if (json.status !== 'success') { _ipOrgCache.set(ip, null); return null; }
+        // Prefer org (registered org name) over isp, strip leading ASN prefix if present
+        let org = json.org || json.isp || null;
         if (org) org = org.replace(/^AS\d+\s+/i, '').trim();
         const result = {
           org:   org,
-          asn:   json.asn  || null,
-          abuse: json.abuse_contact_email || null,
+          asn:   json.as ? json.as.split(' ')[0] : null,  // "AS47583 Hostinger..." → "AS47583"
+          abuse: null,  // ip-api.com free tier doesn't expose abuse contact
         };
         _ipOrgCache.set(ip, result);
         return result;
