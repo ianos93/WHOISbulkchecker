@@ -724,7 +724,7 @@
     .detail-row { display: none; }
     .detail-row.is-open { display: table-row; }
 
-    /* Outer clip wrapper — animates height via max-height */
+    /* Animating wrapper inside the td — max-height drives the height transition */
     .detail-row-inner {
       overflow: hidden;
       max-height: 0;
@@ -734,7 +734,7 @@
     }
 
     .detail-row-inner.is-open {
-      max-height: 600px; /* generous ceiling — panel is never this tall */
+      max-height: 600px;
       opacity: 1;
       transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
                   opacity    0.24s ease;
@@ -1077,9 +1077,10 @@
           </div>
           <ul class="info-list">
             <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
+            <li>Subdomains are resolved to their apex domain using the <strong>Mozilla Public Suffix List</strong> — so <code>blog.example.co.uk</code> is correctly looked up as <code>example.co.uk</code></li>
             <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into <strong>batches of 50</strong> with a 4-second pause between batches to avoid overwhelming registries</li>
             <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant and skips the rate limiter entirely</li>
-            <li><strong>Hosting provider</strong> is detected by resolving the domain's own <strong>A record</strong> via Cloudflare DoH, then looking up the IP's ASN via <strong>ip-api.com</strong>. Falls back to NS hostname pattern-matching, then NS IP lookup, if the domain has no A record</li>
+            <li><strong>Hosting provider</strong> is detected by resolving the domain's own <strong>A record</strong> via Cloudflare DoH, then looking up the IP's ASN via <strong>ip-api.com</strong>. Falls back to NS hostname pattern-matching if the domain has no A record</li>
             <li>All lookups run entirely in your browser — <strong>no data is sent to any server owned by this tool</strong></li>
             <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
           </ul>
@@ -1181,7 +1182,7 @@
     <div class="footer-inner">
       <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener noreferrer"><strong>ianos</strong></a></span>
       <span class="footer-sep">·</span>
-      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a> &amp; <a href="https://ip-api.com" target="_blank" rel="noopener noreferrer">ip-api.com</a></span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a>, <a href="https://publicsuffix.org" target="_blank" rel="noopener noreferrer">Mozilla PSL</a> &amp; <a href="https://ip-api.com" target="_blank" rel="noopener noreferrer">ip-api.com</a></span>
       <span class="footer-sep">·</span>
       <span>No data stored &nbsp;·&nbsp; MIT License</span>
     </div>
@@ -1243,9 +1244,7 @@
       d = d.replace(/^www\./, '');
 
       // 2a. Normalise Unicode/IDN labels to ASCII punycode via the URL constructor
-      //     (UTS#46 mapping — handles é, ü, 中文, etc.)
-      //     Only attempt if the string contains non-ASCII characters, to avoid
-      //     paying the URL-parse cost on every plain ASCII domain.
+      //     Only attempt if the string contains non-ASCII characters.
       if (/[^\x00-\x7F]/.test(d)) {
         try {
           d = new URL('https://' + d).hostname;
@@ -1278,12 +1277,20 @@
       if (!/^[a-z]{2,}$/.test(tld)) return { ok: false, reason: `invalid TLD: ${tld}` };
 
       // labels.length >= 2 is guaranteed by the dot-check above combined with TLD validation
-      return { ok: true, domain: d };
+
+      // 8. Resolve apex domain via PSL — strips subdomains so we always
+      //    look up the registrable domain (e.g. blog.example.co.uk → example.co.uk).
+      //    If PSL isn't loaded yet, fall back to the full validated hostname.
+      const apex = getApexDomain(d) || d;
+
+      return { ok: true, domain: apex, submitted: d };
     }
 
     /**
      * Parse raw textarea/file text into validated unique domains.
      * Returns { valid: string[], skipped: { raw, reason }[] }
+     * Deduplicates on the resolved apex domain — so "blog.example.com" and
+     * "shop.example.com" both resolve to "example.com" and are counted once.
      * No hard cap — all valid domains are returned; queue handles batching.
      */
     function parseAndValidateDomains(text) {
@@ -1303,7 +1310,7 @@
           if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
           continue;
         }
-        if (seen.has(r.domain)) continue; // silently deduplicate
+        if (seen.has(r.domain)) continue; // deduplicate on apex
         seen.add(r.domain);
         valid.push(r.domain);
       }
@@ -1417,6 +1424,127 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC SUFFIX LIST  (PSL)
+    // Fetched once per session from publicsuffix.org, parsed into three sets:
+    //   _pslExact     — exact suffixes  e.g. "co.uk", "com", "photography"
+    //   _pslWildcard  — wildcard bases  e.g. "kawasaki.jp" (meaning *.kawasaki.jp)
+    //   _pslException — exception rules e.g. "!city.kawasaki.jp"
+    // Cached in sessionStorage so a page reload doesn't re-fetch.
+    // Falls back gracefully to single-label TLD if the fetch fails.
+    // ─────────────────────────────────────────────────────────────────────────
+    const PSL_URL         = 'https://publicsuffix.org/list/public_suffix_list.dat';
+    const PSL_SESSION_KEY = 'bulkwhois_psl';
+
+    let _pslExact     = null; // Set<string>
+    let _pslWildcard  = null; // Set<string>  (stored without the leading "*.")
+    let _pslException = null; // Set<string>  (stored without the leading "!")
+    let _pslFetch     = null; // in-flight Promise
+
+    async function ensurePSL() {
+      if (_pslExact) return; // already loaded
+
+      if (!_pslFetch) {
+        _pslFetch = (async () => {
+          // Try sessionStorage first — avoids re-fetching on page reload
+          let raw = null;
+          try { raw = sessionStorage.getItem(PSL_SESSION_KEY); } catch {}
+
+          if (!raw) {
+            try {
+              const res = await fetch(PSL_URL, { signal: makeSignal(10000) });
+              if (res.ok) {
+                raw = await res.text();
+                try { sessionStorage.setItem(PSL_SESSION_KEY, raw); } catch {}
+              }
+            } catch { /* network failure — will fall back to single-label */ }
+          }
+
+          const exact     = new Set();
+          const wildcard  = new Set();
+          const exception = new Set();
+
+          if (raw) {
+            for (const line of raw.split('\n')) {
+              const t = line.trim();
+              if (!t || t.startsWith('//')) continue;  // skip blanks and comments
+              if (t.startsWith('!')) {
+                exception.add(t.slice(1).toLowerCase());
+              } else if (t.startsWith('*.')) {
+                wildcard.add(t.slice(2).toLowerCase());  // store base without "*."
+              } else {
+                exact.add(t.toLowerCase());
+              }
+            }
+          }
+
+          _pslExact     = exact;
+          _pslWildcard  = wildcard;
+          _pslException = exception;
+          _pslFetch     = null;
+        })();
+      }
+
+      await _pslFetch;
+    }
+
+    /**
+     * Given a hostname (already lowercased, www-stripped), return the
+     * registrable apex domain — i.e. the public suffix plus one label.
+     *
+     * Examples:
+     *   "example.co.uk"        → "example.co.uk"
+     *   "blog.example.co.uk"   → "example.co.uk"
+     *   "example.com"          → "example.com"
+     *   "a.b.example.com"      → "example.com"
+     *   "city.kawasaki.jp"     → "city.kawasaki.jp"  (PSL exception)
+     *   "foo.city.kawasaki.jp" → "city.kawasaki.jp"
+     *
+     * Returns null if:
+     *   - PSL is not loaded (falls back to caller using single-label TLD)
+     *   - The hostname itself IS a public suffix (e.g. someone submitted "co.uk")
+     */
+    function getApexDomain(hostname) {
+      if (!_pslExact) return null; // PSL not loaded yet — caller falls back
+
+      const labels = hostname.split('.');
+
+      // Walk from longest possible suffix down to 1 label, find the first match.
+      // We test up to labels.length - 1 because there must always be at least
+      // one label to the left of the suffix (the registrable label itself).
+      for (let suffixLen = labels.length - 1; suffixLen >= 1; suffixLen--) {
+        const suffix    = labels.slice(-suffixLen).join('.');
+        const prevLabel = labels[labels.length - suffixLen - 1]; // label just left of suffix
+
+        // Exception rule — this specific domain IS registrable (not a suffix)
+        if (_pslException.has(hostname)) {
+          // Return the exception domain itself (everything from the matching label on)
+          const excLabels = hostname.split('.');
+          // The exception entry means "this is the registrable domain" — return it directly
+          return hostname;
+        }
+
+        if (_pslExact.has(suffix)) {
+          if (!prevLabel) return null; // hostname IS the suffix — not registrable
+          return `${prevLabel}.${suffix}`;
+        }
+
+        // Wildcard: *.suffix — any single label beneath suffix is itself a suffix
+        // so the registrable domain needs TWO labels to the left of the wildcard base.
+        if (suffixLen >= 2) {
+          const wildcardBase = labels.slice(-(suffixLen - 1)).join('.');
+          if (_pslWildcard.has(wildcardBase)) {
+            // suffix here = label + wildcardBase, prevLabel is one above that
+            if (!prevLabel) return null;
+            return `${prevLabel}.${suffix}`;
+          }
+        }
+      }
+
+      // No PSL match — fall back: treat last label as TLD, return last two labels
+      return labels.slice(-2).join('.');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // IANA RDAP BOOTSTRAP  (TLD → authoritative RDAP base URL)
     // Cached in memory for the session so we only fetch dns.json once.
     // ─────────────────────────────────────────────────────────────────────────
@@ -1459,15 +1587,22 @@
       // 2. Rate-limit gate
       await rateLimiter.wait();
 
-      // 3. Try direct registry RDAP via IANA bootstrap first,
-      //    then fall back to rdap.org proxy if bootstrap fails or TLD unknown.
-      //    Try the two-label suffix first (catches .co.uk, .com.au, .org.uk, etc.)
-      //    before falling back to the single TLD label.
-      const labels = domain.split('.');
-      const tld2   = labels.length >= 3 ? labels.slice(-2).join('.') : null;
-      const tld1   = labels[labels.length - 1];
-      const registryBase = (tld2 ? await getRDAPBase(tld2) : null)
-                        || await getRDAPBase(tld1);
+      // 3. Derive the public suffix from the apex domain via PSL so we target
+      //    the correct authoritative RDAP registry. For "example.co.uk" the
+      //    suffix is "co.uk"; for "example.com" it is "com".
+      //    We walk the labels right-to-left and use the first PSL match.
+      const apexLabels = domain.split('.');
+      let suffix = apexLabels[apexLabels.length - 1]; // fallback: single TLD
+      if (_pslExact) {
+        for (let len = apexLabels.length - 1; len >= 1; len--) {
+          const candidate = apexLabels.slice(-len).join('.');
+          if (_pslExact.has(candidate) || _pslWildcard.has(apexLabels.slice(-(len - 1)).join('.'))) {
+            suffix = candidate;
+            break;
+          }
+        }
+      }
+      const registryBase = await getRDAPBase(suffix);
 
       let result = await fetchRDAP(domain, registryBase);
 
@@ -1829,30 +1964,24 @@
     }
 
     async function detectHostingProvider(domain) {
-      // Kick off NS resolution in parallel with domain A-record resolution
-      // so neither has to wait for the other.
       const [nsNames, domainIP] = await Promise.all([
         resolveNSNames(domain),
         resolveARecord(domain),
       ]);
 
-      // Pass 1: domain's own A record → ipapi.co (most accurate — reflects
-      // the actual web host, not the nameserver infrastructure).
+      // Pass 1: domain's own A record → most accurate (actual web host IP)
       if (domainIP) {
         const info = await ipToOrg(domainIP);
         if (info?.org) return { ...info, source: 'a-record' };
       }
 
-      // Pass 2: pattern-match the NS hostnames (fast, no extra requests).
-      // Useful when the domain has no A record (parked, MX-only, etc.).
+      // Pass 2: NS hostname pattern match (fast, no extra requests)
       for (const ns of nsNames) {
         const label = matchNSProvider(ns);
         if (label) return { org: label, asn: null, abuse: null, source: 'ns-pattern' };
       }
 
-      // Pass 3: last resort — resolve the NS hostname to an IP and ask ipapi.co.
-      // Least reliable (may return the NS infrastructure owner rather than the
-      // domain's actual host), but better than nothing.
+      // Pass 3: last resort — NS IP → org (may return NS infra owner, not real host)
       for (const ns of nsNames.slice(0, 2)) {
         const ip = await resolveARecord(ns);
         if (!ip) continue;
@@ -2234,8 +2363,8 @@
           // Don't expand when clicking the domain link itself
           if (e.target.closest('a')) return;
 
-          const idx    = row.dataset.idx;
-          const detail = document.getElementById('detail-row-' + idx);
+          const idx     = row.dataset.idx;
+          const detail  = document.getElementById('detail-row-' + idx);
           const chevron = row.querySelector('.row-chevron');
           if (!detail) return;
 
@@ -2243,8 +2372,7 @@
           const isOpen = detail.classList.contains('is-open');
 
           if (isOpen) {
-            // Collapse: remove open class from inner first (starts transition),
-            // then hide the tr after the transition ends so it doesn't take up space.
+            // Collapse: animate first, hide the tr only after transition ends
             inner.classList.remove('is-open');
             row.classList.remove('row-expanded');
             if (chevron) chevron.classList.remove('chevron-open');
@@ -2254,13 +2382,11 @@
             };
             inner.addEventListener('transitionend', onDone);
           } else {
-            // Expand: show the tr first (so the browser can measure it),
-            // then on the next frame add the open class to trigger the transition.
+            // Expand: make tr visible first so browser can measure it,
+            // then trigger the transition on the next paint via double rAF.
             detail.classList.add('is-open');
             row.classList.add('row-expanded');
             if (chevron) chevron.classList.add('chevron-open');
-            // rAF ensures the tr is in the DOM and painted before the class is added,
-            // guaranteeing the transition fires rather than snapping instantly.
             requestAnimationFrame(() => {
               requestAnimationFrame(() => inner.classList.add('is-open'));
             });
@@ -2420,8 +2546,12 @@
       const rawText = $('domainInput').value;
       if (!rawText.trim()) return showToast('⚠ Paste at least one domain first');
 
-      const { valid, skipped } = parseAndValidateDomains(rawText);
+      // Ensure PSL is loaded before parsing — getApexDomain needs it.
+      // In practice it's already fetched from the DOMContentLoaded kick-off,
+      // but this await is a safety net if the user clicks Check very quickly.
+      await ensurePSL().catch(() => {});
 
+      const { valid, skipped } = parseAndValidateDomains(rawText);
       if (!valid.length) {
         showToast(skipped.length
           ? `⚠ No valid domains — ${skipped[0].reason}`
@@ -2640,6 +2770,10 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       updateCacheInfo();
+
+      // Kick off PSL fetch immediately so it's ready before the user hits Check.
+      // Fire-and-forget — ensurePSL() inside runCheck() will await it if needed.
+      ensurePSL().catch(() => { /* non-fatal — falls back to single-label TLD */ });
 
       // ── Button wiring — all event listeners in one place, no inline onclick ──
       $('infoToggle').addEventListener('click', toggleInfo);
