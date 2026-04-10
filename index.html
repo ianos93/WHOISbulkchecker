@@ -1695,6 +1695,7 @@
       [/\.secureserver\.net$/,         'GoDaddy'],
       [/\.namecheap(hosting)?\.com$/,  'Namecheap'],
       [/\.registrar-servers\.com$/,    'Namecheap'],
+      [/\.dns-parking\.com$/,          'Namecheap (Parked)'],
       [/\.name\.com$/,                 'Name.com'],
       [/\.hover\.com$/,                'Hover'],
       [/\.porkbun\.com$/,              'Porkbun'],
@@ -1734,7 +1735,7 @@
       return null;
     }
 
-    // In-memory cache for IP→org lookups (ipapi.co fallback)
+    // In-memory cache for IP→org lookups
     const _ipOrgCache = new Map();
 
     async function resolveNSNames(domain) {
@@ -1764,24 +1765,62 @@
     }
 
     async function ipToOrg(ip) {
+      // 1. Return cached result if we've seen this IP this session
       if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
+      
+      let result = null;
+
+      // ─────────────────────────────────────────────────────────────────
+      // ATTEMPT 1: ipwho.is (Generous 10k/day limit, HTTPS, free)
+      // ─────────────────────────────────────────────────────────────────
       try {
-        const res = await fetch(
-          `https://ipapi.co/${ip}/json/`,
-          { signal: makeSignal(5000) }
-        );
-        if (!res.ok) { _ipOrgCache.set(ip, null); return null; }
-        const json = await res.json();
-        let org = json.org || null;
-        if (org) org = org.replace(/^AS\d+\s+/i, '').trim();
-        const result = {
-          org:   org,
-          asn:   json.asn  || null,
-          abuse: json.abuse_contact_email || null,
-        };
-        _ipOrgCache.set(ip, result);
-        return result;
-      } catch { _ipOrgCache.set(ip, null); return null; }
+        const res1 = await fetch(`https://ipwho.is/${ip}`, { signal: makeSignal(5000) });
+        if (res1.ok) {
+          const json1 = await res1.json();
+          if (json1.success && json1.connection) {
+            result = {
+              org:   json1.connection.org || json1.connection.isp || null,
+              asn:   json1.connection.asn ? `AS${json1.connection.asn}` : null,
+              abuse: null
+            };
+          }
+        }
+      } catch (e) {
+        // Network error or timeout — proceed to fallback
+      }
+
+      // ─────────────────────────────────────────────────────────────────
+      // ATTEMPT 2: ipinfo.io (Strict 1k/day limit, requires data splitting)
+      // ─────────────────────────────────────────────────────────────────
+      if (!result) {
+        try {
+          const res2 = await fetch(`https://ipinfo.io/${ip}/json`, { 
+            headers: { 'Accept': 'application/json' },
+            signal: makeSignal(5000) 
+          });
+          
+          if (res2.ok) {
+            const json2 = await res2.json();
+            if (json2.org) {
+              // ipinfo formats orgs as: "AS13335 Cloudflare, Inc."
+              // We need to split the ASN from the Organization name
+              const orgMatch = json2.org.match(/^AS(\d+)\s+(.+)$/);
+              if (orgMatch) {
+                result = { org: orgMatch[2], asn: `AS${orgMatch[1]}`, abuse: null };
+              } else {
+                result = { org: json2.org, asn: null, abuse: null };
+              }
+            }
+          }
+        } catch (e) {
+          // Fallback also failed
+        }
+      }
+
+      // Cache the result (even if it's null, to prevent hammering failing 
+      // APIs on the exact same dead IP repeatedly during a large batch)
+      _ipOrgCache.set(ip, result);
+      return result;
     }
 
     async function detectHostingProvider(domain) {
@@ -1793,7 +1832,7 @@
         ip = await resolveARecord(`www.${domain}`);
       }
 
-      // Pass 3: Ask ipapi.co for the organization owning that IP
+      // Pass 3: Ask our APIs for the organization owning that IP
       if (ip) {
         const info = await ipToOrg(ip);
         
