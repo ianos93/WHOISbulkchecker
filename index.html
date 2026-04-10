@@ -580,12 +580,6 @@
     .epp-ok       { background: rgba(61,164,77,.10);   color: var(--green-lt);  border-color: rgba(61,164,77,.27); }
     .epp-neutral  { background: rgba(167,169,190,.08); color: var(--para);      border-color: rgba(167,169,190,.2); }
 
-    /* tooltip — disabled: hover effects removed from EPP flags column */
-    /* .epp-tag[data-tip]:hover::after { ... } */
-
-    .expiry-soon { color: var(--yellow); }
-    .expiry-old  { color: var(--para); }
-
     /* EMPTY STATE */
     .empty-state {
       text-align: center;
@@ -1068,7 +1062,7 @@
             <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
             <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into <strong>batches of 50</strong> with a 4-second pause between batches to avoid overwhelming registries</li>
             <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant and skips the rate limiter entirely</li>
-            <li><strong>Hosting provider</strong> is detected by resolving the domain's NS records via <strong>Cloudflare DoH</strong>, then looking up the NS IP's ASN organisation via <strong>ip-api.com</strong> (free, no key)</li>
+            <li><strong>Hosting provider</strong> is detected by resolving the domain's A records via <strong>Cloudflare DoH</strong>, then looking up the IP's ASN organisation via <strong>ip-api.com</strong> (free, no key)</li>
             <li>All lookups run entirely in your browser — <strong>no data is sent to any server owned by this tool</strong></li>
             <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
           </ul>
@@ -1215,17 +1209,12 @@
 
       let d = raw.trim().toLowerCase();
 
-      // 1. Extract hostname — try URL parse first (fast path for http/ftp URLs),
-      //    then fall back to sequential regex stripping for bare hostnames.
-      if (/^https?:\/\//i.test(d) || /^ftp:\/\//i.test(d)) {
-        try {
-          d = new URL(d).hostname;
-        } catch {
-          return { ok: false, reason: 'invalid URL' };
-        }
-      } else {
-        // Bare hostname — strip any accidental path/query/hash/port
-        d = d.replace(/\/.*$/, '').replace(/\?.*$/, '').replace(/#.*$/, '').replace(/:\d+$/, '');
+      // 1. Force through the browser's native URL parser to handle IDNs gracefully
+      try {
+        const withProtocol = d.match(/^https?:\/\//i) ? d : `http://${d}`;
+        d = new URL(withProtocol).hostname;
+      } catch {
+        return { ok: false, reason: 'invalid URL' };
       }
 
       // 2. Strip leading www.
@@ -1240,7 +1229,7 @@
       // 5. Must have at least one dot
       if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
 
-      // 6. Validate each label (RFC 1035 + allow IDN punycode xn--)
+      // 6. Validate each label (Now safely allows punycode)
       const labels = d.split('.');
       for (const label of labels) {
         if (!label) return { ok: false, reason: 'empty label' };
@@ -1250,11 +1239,10 @@
         }
       }
 
-      // 7. TLD must be at least 2 chars and all alpha (no digits — rules out IP-like strings)
+      // 7. TLD must be at least 2 chars and all alpha
       const tld = labels[labels.length - 1];
       if (!/^[a-z]{2,}$/.test(tld)) return { ok: false, reason: `invalid TLD: ${tld}` };
 
-      // labels.length >= 2 is guaranteed by the dot-check above combined with TLD validation
       return { ok: true, domain: d };
     }
 
@@ -1452,7 +1440,7 @@
       // 5. Cache successful results only
       if (!result._failed) {
         const { _failed, ...clean } = result;
-        // 5a. For registered domains, try to detect hosting provider via NS lookup
+        // 5a. For registered domains, try to detect hosting provider
         if (clean.status === 'registered') {
           const hostInfo = await detectHostingProvider(domain);
           clean.hostingProvider = hostInfo?.org || null;
@@ -1686,10 +1674,6 @@
 
     // ─────────────────────────────────────────────────────────────────────────
     // HOSTING PROVIDER DETECTION
-    // Strategy:
-    //   1. Resolve NS records via Cloudflare DoH (browser-safe, no CORS issues)
-    //   2. Match the NS hostname against a known-provider pattern table (instant, no API)
-    //   3. If no pattern match, fall back to ipapi.co for IP→org (CORS-enabled, free)
     // ─────────────────────────────────────────────────────────────────────────
 
     // Pattern table: regex tested against NS hostnames → provider label
@@ -1801,21 +1785,34 @@
     }
 
     async function detectHostingProvider(domain) {
-      const nsNames = await resolveNSNames(domain);
-      if (!nsNames.length) return null;
-
-      // Pass 1: pattern match on NS hostname (fast, no extra requests)
-      for (const ns of nsNames) {
-        const label = matchNSProvider(ns);
-        if (label) return { org: label, asn: null, abuse: null };
+      // Pass 1: Check the root domain's A record
+      let ip = await resolveARecord(domain);
+      
+      // Pass 2: If the root has no A record (or fails), try the www subdomain
+      if (!ip) {
+        ip = await resolveARecord(`www.${domain}`);
       }
 
-      // Pass 2: resolve one NS to an IP and ask ipapi.co (CORS-safe)
-      for (const ns of nsNames.slice(0, 2)) {
-        const ip = await resolveARecord(ns);
-        if (!ip) continue;
+      // Pass 3: Ask ipapi.co for the organization owning that IP
+      if (ip) {
         const info = await ipToOrg(ip);
-        if (info?.org) return info;
+        
+        if (info?.org) {
+           // Append a note if it's Cloudflare
+           if (info.org.includes('Cloudflare')) {
+             info.org = 'Cloudflare (Proxy/CDN)';
+           }
+           return info;
+        }
+      }
+
+      // Pass 4: Fallback to NS pattern matching (for parked domains or if A record lookup failed)
+      const nsNames = await resolveNSNames(domain);
+      if (nsNames.length) {
+        for (const ns of nsNames) {
+          const label = matchNSProvider(ns);
+          if (label) return { org: label, asn: null, abuse: null };
+        }
       }
 
       return null;
