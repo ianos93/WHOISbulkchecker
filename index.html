@@ -1778,14 +1778,19 @@
     }
 
     async function resolveARecord(hostname) {
+      // Query A (type 1) and AAAA (type 28) in parallel — return whichever
+      // resolves. noya.dev-style domains that are IPv6-only return null from
+      // an A-only query, hiding the real host from ipToOrg entirely.
       try {
-        const res = await fetch(
-          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+        const query = (type, rrtype) => fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${rrtype}`,
           { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
-        );
-        if (!res.ok) return null;
-        const json = await res.json();
-        return (json.Answer || []).find(r => r.type === 1)?.data || null;
+        ).then(r => r.ok ? r.json() : null)
+         .then(j => (j?.Answer || []).find(r => r.type === type)?.data || null)
+         .catch(() => null);
+
+        const [ipv4, ipv6] = await Promise.all([query(1, 'A'), query(28, 'AAAA')]);
+        return ipv4 || ipv6 || null;
       } catch { return null; }
     }
 
