@@ -705,7 +705,7 @@
       display: inline-block;
       font-size: 16px;
       line-height: 1;
-      transition: transform .2s ease, color .15s;
+      transition: transform .25s ease, color .15s;
       user-select: none;
     }
 
@@ -714,20 +714,33 @@
     .data-row.row-expanded { background: var(--surface2); }
     .data-row.row-expanded td { border-bottom: none; }
 
-    .detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border2); overflow: hidden; }
+    .detail-row td { padding: 0 !important; border-bottom: none; }
     .detail-row { display: none; }
 
-    .detail-panel {
-      display: flex;
-      gap: 0;
+    /* The Grid trick for smooth height animation */
+    .detail-panel-wrapper {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       background: var(--bg);
-      border-top: 1px solid var(--border2);
-      animation: detailIn .18s ease both;
     }
 
-    @keyframes detailIn {
-      from { opacity: 0; transform: translateY(-4px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .detail-panel-wrapper.is-open {
+      grid-template-rows: 1fr;
+    }
+
+    .detail-panel {
+      overflow: hidden;
+      display: flex;
+      gap: 0;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      border-top: 1px solid transparent;
+    }
+
+    .detail-panel-wrapper.is-open .detail-panel {
+      opacity: 1;
+      border-top-color: var(--border2);
     }
 
     .detail-section {
@@ -1060,11 +1073,10 @@
           </div>
           <ul class="info-list">
             <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
-            <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into <strong>batches of 50</strong> with a 4-second pause between batches to avoid overwhelming registries</li>
-            <li>Results are cached in <strong>localStorage</strong> for 24 hours — re-checking known domains is instant and skips the rate limiter entirely</li>
-            <li><strong>Hosting provider</strong> is detected by resolving the domain's A records via <strong>Cloudflare DoH</strong>, then looking up the IP's ASN organisation via <strong>ip-api.com</strong> (free, no key)</li>
+            <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into batches of 50 to avoid overwhelming registries</li>
+            <li><strong>Hosting provider</strong> is detected by resolving the domain's <strong>A records</strong> via Cloudflare DoH, then looking up the IP via <strong>ipwho.is</strong> (with <strong>ipinfo.io</strong> as a fallback). If proxying is detected, it falls back to NS pattern matching.</li>
+            <li><strong>ccTLD Coverage:</strong> RDAP coverage is excellent for gTLDs (.com, .net, .app), but many ccTLDs (like .uk, .de, .au) strictly use legacy WHOIS port 43 and may return errors here.</li>
             <li>All lookups run entirely in your browser — <strong>no data is sent to any server owned by this tool</strong></li>
-            <li>RDAP coverage is best for <code>.com</code>, <code>.net</code>, <code>.org</code> and modern gTLDs. Some ccTLDs may return errors</li>
           </ul>
         </div>
 
@@ -1209,7 +1221,6 @@
 
       let d = raw.trim().toLowerCase();
 
-      // 1. Force through the browser's native URL parser to handle IDNs gracefully
       try {
         const withProtocol = d.match(/^https?:\/\//i) ? d : `http://${d}`;
         d = new URL(withProtocol).hostname;
@@ -1217,19 +1228,12 @@
         return { ok: false, reason: 'invalid URL' };
       }
 
-      // 2. Strip leading www.
       d = d.replace(/^www\./, '');
 
-      // 3. Skip blank lines and comment lines
       if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
-
-      // 4. Must not exceed RFC max length
       if (d.length > MAX_FQDN) return { ok: false, reason: `exceeds ${MAX_FQDN} chars` };
-
-      // 5. Must have at least one dot
       if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
 
-      // 6. Validate each label (Now safely allows punycode)
       const labels = d.split('.');
       for (const label of labels) {
         if (!label) return { ok: false, reason: 'empty label' };
@@ -1239,9 +1243,11 @@
         }
       }
 
-      // 7. TLD must be at least 2 chars and all alpha
       const tld = labels[labels.length - 1];
-      if (!/^[a-z]{2,}$/.test(tld)) return { ok: false, reason: `invalid TLD: ${tld}` };
+      // FIX: Allow standard alphabetical TLDs OR Punycode TLDs
+      if (!/^[a-z]{2,}$/.test(tld) && !/^xn--[a-z0-9-]+$/.test(tld)) {
+        return { ok: false, reason: `invalid TLD: ${tld}` };
+      }
 
       return { ok: true, domain: d };
     }
@@ -2219,37 +2225,49 @@
           </div>`;
       }
 
-      return `<div class="detail-panel">${domainSection}${registrarSection}${hostSection}</div>`;
+      // WRAPPER ADDED HERE FOR CSS ANIMATION
+      return `
+        <div class="detail-panel-wrapper">
+          <div class="detail-panel">
+            ${domainSection}${registrarSection}${hostSection}
+          </div>
+        </div>`;
     }
 
     function wireDetailRows() {
       $('tableContainer').querySelectorAll('.data-row').forEach(row => {
         row.addEventListener('click', e => {
-          // Don't expand when clicking the domain link itself
           if (e.target.closest('a')) return;
 
-          const idx    = row.dataset.idx;
-          const detail = document.getElementById('detail-row-' + idx);
+          const idx     = row.dataset.idx;
+          const detail  = document.getElementById('detail-row-' + idx);
           const chevron = row.querySelector('.row-chevron');
           if (!detail) return;
 
-          const isOpen = detail.style.display === 'table-row';
+          const wrapper = detail.querySelector('.detail-panel-wrapper');
+          const isOpen  = row.classList.contains('row-expanded');
 
           if (isOpen) {
-            detail.style.display = 'none';
+            // Initiate closing animation
+            wrapper.classList.remove('is-open');
             row.classList.remove('row-expanded');
             if (chevron) chevron.classList.remove('chevron-open');
+            
+            // Wait for the CSS transition to finish before hiding the row entirely
+            setTimeout(() => {
+              // Ensure it hasn't been reopened during the timeout
+              if (!row.classList.contains('row-expanded')) {
+                detail.style.display = 'none';
+              }
+            }, 300); // Matches the 0.3s CSS transition
           } else {
+            // Initiate opening animation
             detail.style.display = 'table-row';
+            void detail.offsetWidth; // Force a DOM reflow so the browser registers the display change
+            
+            wrapper.classList.add('is-open');
             row.classList.add('row-expanded');
             if (chevron) chevron.classList.add('chevron-open');
-            // Re-trigger entry animation
-            const panel = detail.querySelector('.detail-panel');
-            if (panel) {
-              panel.style.animation = 'none';
-              void panel.offsetWidth;
-              panel.style.animation = '';
-            }
           }
         });
       });
