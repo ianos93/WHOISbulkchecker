@@ -1209,6 +1209,89 @@
     const RETRY_DELAY = 3000;   // wait 3 s on 429 before retry
 
     // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC SUFFIX LIST (PSL) CACHE & PARSER
+    // ─────────────────────────────────────────────────────────────────────────
+    const pslExact = new Set();
+    const pslWildcard = new Set();
+    const pslException = new Set();
+
+    async function initPSL() {
+      const CACHE_KEY = 'psl_cache_v1';
+      let data = sessionStorage.getItem(CACHE_KEY);
+
+      if (!data) {
+        try {
+          // Fetch the official raw list
+          const res = await fetch('https://raw.githubusercontent.com/publicsuffix/list/master/public_suffix_list.dat');
+          if (!res.ok) throw new Error('Fetch failed');
+          const text = await res.text();
+
+          // Ignore comments and blank lines
+          const rules = text.split('\n')
+            .map(l => l.trim().toLowerCase())
+            .filter(l => l && !l.startsWith('//'));
+
+          // Cache as JSON in sessionStorage (loads instantly on next refresh)
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(rules));
+          data = JSON.stringify(rules);
+        } catch (e) {
+          console.warn('Could not load PSL. Subdomain stripping will use basic heuristic.', e);
+          return;
+        }
+      }
+
+      // Populate our Sets for lightning-fast O(1) lookups during batch processing
+      const rules = JSON.parse(data);
+      for (const rule of rules) {
+        if (rule.startsWith('!')) {
+          pslException.add(rule.slice(1));
+        } else if (rule.startsWith('*.')) {
+          pslWildcard.add(rule.slice(2));
+        } else {
+          pslExact.add(rule);
+        }
+      }
+    }
+
+    // Strips subdomains to return the true registrable root domain
+    function getRootDomain(domain) {
+      // Fallback heuristic if the GitHub fetch failed (e.g., offline)
+      if (!pslExact.size) {
+        const p = domain.split('.');
+        if (p.length > 2 && p[p.length-1].length === 2 && ['co','com','org','net','edu','gov','ac'].includes(p[p.length-2])) {
+          return p.slice(-3).join('.');
+        }
+        return p.slice(-2).join('.');
+      }
+
+      const labels = domain.split('.');
+      let matchLen = 0; // Tracks how many labels make up the public suffix
+
+      // Iterate from the top-level down
+      for (let i = labels.length - 1; i >= 0; i--) {
+        const suffix = labels.slice(i).join('.');
+        
+        if (pslException.has(suffix)) {
+          // Exceptions (like !www.ck) mean the suffix ITSELF is the registrable domain
+          matchLen = labels.length - i - 1;
+          break;
+        }
+
+        const parentSuffix = labels.slice(i + 1).join('.');
+        if (pslExact.has(suffix) || pslWildcard.has(parentSuffix)) {
+           matchLen = labels.length - i;
+        }
+      }
+
+      // The root domain is the Public Suffix + 1 label to the left
+      if (matchLen > 0 && matchLen < labels.length) {
+         return labels.slice(labels.length - matchLen - 1).join('.');
+      }
+      
+      return domain;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // INPUT VALIDATION & SANITIZATION
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -1221,6 +1304,7 @@
 
       let d = raw.trim().toLowerCase();
 
+      // 1. Force through the browser's native URL parser to handle IDNs gracefully
       try {
         const withProtocol = d.match(/^https?:\/\//i) ? d : `http://${d}`;
         d = new URL(withProtocol).hostname;
@@ -1228,12 +1312,22 @@
         return { ok: false, reason: 'invalid URL' };
       }
 
+      // 2. Strip leading www.
       d = d.replace(/^www\./, '');
 
+      // 3. Strip subdomains using the Public Suffix List
+      d = getRootDomain(d);
+
+      // 4. Skip blank lines and comment lines
       if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
+
+      // 5. Must not exceed RFC max length
       if (d.length > MAX_FQDN) return { ok: false, reason: `exceeds ${MAX_FQDN} chars` };
+
+      // 6. Must have at least one dot
       if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
 
+      // 7. Validate each label (Now safely allows punycode)
       const labels = d.split('.');
       for (const label of labels) {
         if (!label) return { ok: false, reason: 'empty label' };
@@ -1243,10 +1337,10 @@
         }
       }
 
+      // 8. TLD must be at least 2 chars and all alpha OR a punycode TLD
       const tld = labels[labels.length - 1];
-      // FIX: Allow standard alphabetical TLDs OR Punycode TLDs
       if (!/^[a-z]{2,}$/.test(tld) && !/^xn--[a-z0-9-]+$/.test(tld)) {
-        return { ok: false, reason: `invalid TLD: ${tld}` };
+         return { ok: false, reason: `invalid TLD: ${tld}` };
       }
 
       return { ok: true, domain: d };
@@ -2642,8 +2736,21 @@
     // INIT
     // ─────────────────────────────────────────────────────────────────────────
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       updateCacheInfo();
+
+      // Disable the button and show a spinner while the PSL downloads/parses
+      const runBtn = $('runBtn');
+      const originalText = runBtn.innerHTML;
+      runBtn.disabled = true;
+      runBtn.innerHTML = '<span class="spinner" style="border-top-color: #0f0e17; width: 14px; height: 14px; border-width: 2px; margin-right: 6px;"></span> Loading rules...';
+
+      // Load the Public Suffix List
+      await initPSL();
+
+      // Re-enable the button
+      runBtn.disabled = false;
+      runBtn.innerHTML = originalText;
 
       // ── Button wiring — all event listeners in one place, no inline onclick ──
       $('infoToggle').addEventListener('click', toggleInfo);
