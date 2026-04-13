@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Check domain registration status and EPP flags in bulk using RDAP. No data stored — runs entirely in your browser." />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https:; img-src 'self' data:;" />
-  <title>WHO'SWHO — Domain Status Checker</title>
+  <title>BulkWHOIS — Domain Status Checker</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -232,400 +232,117 @@
       margin-left: auto;
     }
 
-    .btn-export:hover { color: var(--green); border-color: var(--green); }
-    .btn-export:disabled { opacity: .4; cursor: not-allowed; }
-
-    .icon { width: 14px; height: 14px; }
-
-    /* ── DROP ZONE ── */
-    .drop-zone {
-      border: 2px dashed var(--border2);
-      border-radius: var(--radius);
-      padding: 22px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .2s;
-      background: var(--surface2);
-      margin-bottom: 20px;
-      outline: none;
-    }
-
-    .drop-zone:hover, .drop-zone.drag-over {
-      border-color: var(--accent);
-      background: rgba(255,137,6,.06);
-    }
-
-    .drop-zone:focus-visible {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(255,137,6,.15);
-    }
-
-    .drop-text {
-      color: var(--para);
-      font-size: 13px;
-      margin-bottom: 4px;
-    }
-
-    .drop-link { color: var(--accent); text-decoration: underline; }
-
-    .drop-hint {
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 6px;
-    }
-
-    .drop-zone.loaded {
-      border-color: var(--green);
-      background: rgba(61,164,77,.08);
-    }
-
-    .drop-zone.loaded .drop-text { color: var(--green-lt); }
+    .btn-export:hover { background: rgba(61,164,77,.08); border-color: var(--green-lt); }
+    .btn-export:disabled { opacity: .3; cursor: not-allowed; }
 
     /* ── PROGRESS ── */
-    #progressWrap {
-      display: none;
-      margin-bottom: 20px;
-    }
+    .progress-wrap { margin-bottom: 20px; display: none; }
 
-    .progress-bar-bg {
-      height: 6px;
-      background: var(--surface2);
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 10px;
-      position: relative;
-    }
-
-    #progressBar {
-      height: 100%;
-      width: 0;
-      background: linear-gradient(90deg, var(--accent), #ffb84d);
-      transition: width .3s ease;
-      border-radius: 8px;
-    }
-
-    .progress-info {
+    .progress-header {
       display: flex;
       justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--para);
+      margin-bottom: 8px;
+    }
+
+    .progress-right {
+      display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 12px;
-      color: var(--para);
-      margin-bottom: 8px;
     }
 
-    .progress-label { font-weight: 500; }
-    .progress-batch { color: var(--muted); font-size: 11px; }
-
-    /* ── SPINNER ── */
-    .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid transparent;
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      display: inline-block;
-      animation: spin .6s linear infinite;
+    .progress-batch {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── INFO PANEL ── */
-    .info-toggle {
+    .btn-cancel {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
       background: transparent;
       border: 1px solid var(--border2);
-      color: var(--para);
-      font-size: 12px;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: var(--radius);
+      border-radius: 5px;
+      padding: 3px 9px;
       cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all .2s;
-      margin-bottom: 24px;
+      transition: color .15s, border-color .15s;
     }
 
-    .info-toggle:hover { color: var(--text); border-color: var(--muted); }
-    .info-toggle.active { color: var(--accent); border-color: var(--accent); }
+    .btn-cancel:hover { color: var(--red-lt); border-color: rgba(229,49,112,.4); }
 
-    .info-panel {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height .3s ease;
-      margin-bottom: 20px;
-    }
-
-    .info-panel.open { max-height: 2000px; }
-
-    .info-content {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      font-size: 13px;
-      line-height: 1.7;
-      color: var(--para);
-    }
-
-    .info-content h3 {
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 8px;
-      margin-top: 16px;
-    }
-
-    .info-content h3:first-child { margin-top: 0; }
-
-    .info-content p { margin-bottom: 10px; }
-
-    .info-content ul {
-      margin-left: 18px;
-      margin-bottom: 10px;
-    }
-
-    .info-content li { margin-bottom: 5px; }
-
-    .info-content code {
-      background: var(--bg);
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--accent);
-    }
-
-    .info-content strong { color: var(--text); font-weight: 600; }
-
-    /* ── TABLE ── */
-    #tableContainer {
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: var(--shadow);
-    }
-
-    .empty-state {
-      padding: 60px 20px;
-      text-align: center;
-      color: var(--muted);
-    }
-
-    .empty-state .icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-      opacity: .3;
-    }
-
-    .empty-state p { font-size: 13px; }
-
-    .table-header {
-      background: var(--surface2);
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .table-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      letter-spacing: .02em;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-      max-height: 600px;
-      overflow-y: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-
-    thead {
-      position: sticky;
-      top: 0;
-      background: var(--surface2);
-      z-index: 10;
-    }
-
-    th {
-      text-align: left;
-      padding: 12px 16px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      font-size: 10px;
-      letter-spacing: .08em;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    tbody tr {
-      border-bottom: 1px solid var(--border);
-      transition: background .12s;
-    }
-
-    tbody tr:hover { background: var(--surface2); }
-
-    tbody tr.filtered-out { display: none; }
-
-    td {
-      padding: 14px 16px;
-      color: var(--para);
-      vertical-align: middle;
-    }
-
-    .cell-domain {
-      font-family: var(--font-mono);
-      font-size: 13px;
-      color: var(--text);
-      font-weight: 500;
-      max-width: 280px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .status-badge {
-      display: inline-block;
-      padding: 4px 10px;
+    .progress-bar-bg {
+      height: 3px;
+      background: var(--border2);
       border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      white-space: nowrap;
-      letter-spacing: .02em;
+      overflow: hidden;
     }
 
-    .status-available {
-      background: rgba(61,164,77,.15);
-      color: var(--green-lt);
-      border: 1px solid rgba(61,164,77,.25);
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width .3s ease;
+      width: 0%;
     }
 
-    .status-registered {
-      background: rgba(229,49,112,.12);
-      color: var(--red-lt);
-      border: 1px solid rgba(229,49,112,.22);
+    /* ── STATS ROW ── */
+    .stats-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
     }
 
-    .status-error {
-      background: rgba(246,166,35,.12);
-      color: var(--yellow);
-      border: 1px solid rgba(246,166,35,.25);
-    }
-
-    .status-pending, .status-checking {
-      background: var(--surface2);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      display: inline-flex;
+    .stat-pill {
+      display: flex;
       align-items: center;
       gap: 6px;
-    }
-
-    .cell-epp {
-      max-width: 320px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .epp-code {
-      display: inline-block;
-      background: var(--bg);
-      color: var(--accent);
-      padding: 3px 7px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: 500;
-      margin-right: 4px;
-      margin-bottom: 2px;
-      font-family: var(--font-mono);
-      letter-spacing: .01em;
-    }
-
-    .cell-cache {
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .cache-badge {
-      background: var(--surface2);
-      color: var(--green-lt);
-      padding: 3px 7px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: 500;
-      border: 1px solid rgba(61,164,77,.2);
-    }
-
-    /* ── STATS ── */
-    #statsRow {
-      display: none;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      text-align: center;
-    }
-
-    .stat-value {
-      font-size: 24px;
+      font-size: 12px;
       font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
     }
 
-    .stat-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--muted);
-      font-weight: 500;
-    }
+    .stat-pill.all   { border-color: var(--border2); color: var(--para); background: var(--surface); }
+    .stat-pill.reg   { border-color: rgba(229,49,112,.25); color: var(--red-lt); background: rgba(229,49,112,.07); }
+    .stat-pill.avail { border-color: rgba(61,164,77,.25); color: var(--green-lt); background: rgba(61,164,77,.07); }
+    .stat-pill.err   { border-color: rgba(246,166,35,.25); color: var(--yellow); background: rgba(246,166,35,.07); }
 
-    .stat-card.available .stat-value { color: var(--green-lt); }
-    .stat-card.registered .stat-value { color: var(--red-lt); }
-    .stat-card.errors .stat-value { color: var(--yellow); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .dot-red    { background: var(--red); }
+    .dot-green  { background: var(--green); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-muted  { background: var(--muted); }
 
     /* ── FILTER BAR ── */
-    #filterSection {
-      display: none;
-      margin-bottom: 20px;
+    .filter-section {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      align-items: flex-start;
     }
 
     .filter-group {
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: var(--radius);
-      padding: 14px 18px;
-      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
 
-    .filter-label {
+    .filter-group-label {
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: .1em;
       color: var(--muted);
-      margin-bottom: 10px;
     }
 
     .filter-bar {
@@ -635,223 +352,814 @@
     }
 
     .filter-btn {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--para);
-      font-size: 11px;
+      font-family: var(--font-sans);
+      font-size: 12px;
       font-weight: 500;
-      padding: 6px 12px;
-      border-radius: 5px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      color: var(--para);
       cursor: pointer;
       transition: all .15s;
-      font-family: var(--font-sans);
     }
 
     .filter-btn:hover { color: var(--text); border-color: var(--muted); }
 
     .filter-btn.active {
-      background: var(--accent);
-      color: #0f0e17;
-      border-color: var(--accent);
-      font-weight: 600;
+      color: var(--accent);
+      border-color: rgba(255,137,6,.4);
+      background: rgba(255,137,6,.08);
     }
 
-    .filter-btn .count {
-      opacity: .7;
-      margin-left: 4px;
-    }
+    /* EPP filter specific active states by tier */
+    .filter-btn.active.epp-f-critical { color: var(--red-lt); border-color: rgba(229,49,112,.4); background: rgba(229,49,112,.08); }
+    .filter-btn.active.epp-f-warn     { color: var(--yellow);  border-color: rgba(246,166,35,.4); background: rgba(246,166,35,.08); }
+    .filter-btn.active.epp-f-ok       { color: var(--green-lt);border-color: rgba(61,164,77,.4);  background: rgba(61,164,77,.08); }
+    .filter-btn.active.epp-f-neutral  { color: var(--para);    border-color: rgba(167,169,190,.4);background: rgba(167,169,190,.06); }
 
-    .filter-btn.active .count { opacity: .85; }
-
-    #eppFilterGroup {
-      display: none;
-    }
-
-    /* ── CACHE INFO ── */
-    .cache-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 20px;
-    }
-
-    .cache-count {
-      background: var(--surface2);
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-weight: 500;
-      color: var(--para);
-    }
-
-    .cache-clear {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 500;
-      padding: 4px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all .15s;
-    }
-
-    .cache-clear:hover {
-      color: var(--red-lt);
-      border-color: rgba(229,49,112,.4);
-      background: rgba(229,49,112,.08);
-    }
-
-    /* ── TOAST ── */
-    #toast {
-      position: fixed;
-      bottom: 30px;
-      right: 30px;
-      background: var(--surface);
-      color: var(--text);
-      padding: 14px 20px;
-      border-radius: var(--radius);
+    /* ── TABLE ── */
+    .table-wrap {
       border: 1px solid var(--border2);
-      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: fixed;
+    }
+
+    /* Column widths: Domain | Avail | EPP Flags | Registrar | Expiry | Hosting | Chevron */
+    table th:nth-child(1), table td:nth-child(1) { width: 20%; }
+    table th:nth-child(2), table td:nth-child(2) { width: 11%; }
+    table th:nth-child(3), table td:nth-child(3) { width: 19%; }
+    table th:nth-child(4), table td:nth-child(4) { width: 17%; }
+    table th:nth-child(5), table td:nth-child(5) { width: 10%; }
+    table th:nth-child(6), table td:nth-child(6) { width: 20%; }
+
+    thead { background: var(--surface2); }
+
+    th {
+      text-align: left;
+      padding: 11px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border2);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      overflow: hidden;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr {
+      background: var(--surface);
+      transition: background .12s;
+      animation: rowIn .2s ease both;
+    }
+
+    @keyframes rowIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    tbody tr:hover { background: var(--surface2); }
+
+    .domain-cell {
+      font-family: var(--font-mono);
       font-size: 13px;
       font-weight: 500;
-      transform: translateY(120px);
-      opacity: 0;
-      transition: all .3s cubic-bezier(.2,.9,.3,1);
-      z-index: 1000;
-      max-width: 320px;
+      color: var(--text);
     }
 
-    #toast.show {
-      transform: translateY(0);
+    /* inner flex row: scrollable text + pinned badges */
+    .domain-cell-inner {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .domain-cell-inner .scroll-cell {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Badges stay pinned to the right, never scroll or clip */
+    .domain-cell-inner .cache-badge,
+    .domain-cell-inner .source-badge {
+      flex-shrink: 0;
+    }
+
+    .domain-cell a { color: var(--accent); text-decoration: none; }
+    .domain-cell a:hover { text-decoration: underline; }
+
+    /* STATUS BADGES */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 5px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      white-space: nowrap;
+    }
+
+    .status-registered { background: rgba(229,49,112,.12); color: var(--red-lt); border: 1px solid rgba(229,49,112,.25); }
+    .status-available  { background: rgba(61,164,77,.12);  color: var(--green-lt); border: 1px solid rgba(61,164,77,.25); }
+    .status-error      { background: rgba(246,166,35,.12); color: var(--yellow);   border: 1px solid rgba(246,166,35,.25); }
+    .status-pending    { background: rgba(107,109,138,.1); color: var(--muted);    border: 1px solid rgba(107,109,138,.2); }
+
+    /* SPINNER */
+    .spinner {
+      display: inline-block;
+      width: 9px; height: 9px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .registrar-cell {
+      color: var(--para);
+      font-size: 12px;
+    }
+    .expiry-cell { font-family: var(--font-mono); font-size: 12px; color: var(--para); white-space: nowrap; }
+
+    /* ── SCROLL-ON-HOVER for truncated cells ── */
+    .scroll-cell {
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Fade mask on the right edge so text fades out instead of hard-clipping */
+    .scroll-cell.overflows::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 32px; height: 100%;
+      background: linear-gradient(to right, transparent, var(--surface));
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+
+    tbody tr:hover .scroll-cell.overflows::after {
+      background: linear-gradient(to right, transparent, var(--surface2));
+    }
+
+    /* Hide right fade when scrolled to end */
+    .scroll-cell.overflows.scrolled::after {
+      opacity: 0;
+    }
+
+    /* Left fade mask — appears after scroll has started */
+    .scroll-cell.overflows::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 32px; height: 100%;
+      background: linear-gradient(to left, transparent, var(--surface));
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s;
+      z-index: 1;
+    }
+
+    tbody tr:hover .scroll-cell.overflows::before {
+      background: linear-gradient(to left, transparent, var(--surface2));
+    }
+
+    /* Show left fade once scrolling has begun */
+    .scroll-cell.overflows.scrolling::before {
+      opacity: 1;
+    }
+    .scroll-cell.overflows.scrolled::before {
       opacity: 1;
     }
 
-    /* ── RESPONSIVE ── */
+    .scroll-cell .scroll-inner {
+      display: inline-block;
+      white-space: nowrap;
+      will-change: transform;
+    }
+
+
+    .epp-wrap { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; }
+
+    .epp-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: .02em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      cursor: default;
+      position: relative;
+    }
+
+    .epp-critical { background: rgba(229,49,112,.13);  color: var(--red-lt);    border-color: rgba(229,49,112,.3); }
+    .epp-warn     { background: rgba(246,166,35,.12);  color: var(--yellow);    border-color: rgba(246,166,35,.3); }
+    .epp-ok       { background: rgba(61,164,77,.10);   color: var(--green-lt);  border-color: rgba(61,164,77,.27); }
+    .epp-neutral  { background: rgba(167,169,190,.08); color: var(--para);      border-color: rgba(167,169,190,.2); }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 56px 20px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+    }
+
+    .empty-state .icon { font-size: 28px; margin-bottom: 10px; opacity: .35; }
+    .empty-state p { font-size: 13px; color: var(--para); }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      padding: 11px 18px;
+      border-radius: var(--radius);
+      box-shadow: 0 8px 28px rgba(0,0,0,.5);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: all .22s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* FOOTER */
+    footer {
+      margin-top: 44px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: .02em;
+    }
+
+    /* ── DROP ZONE ── */
+    .drop-zone {
+      border: 1.5px dashed var(--border2);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: border-color .18s, background .18s;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(255,137,6,.04);
+    }
+
+    .drop-icon { color: var(--muted); transition: color .18s; }
+    .drop-zone:hover .drop-icon,
+    .drop-zone.drag-over .drop-icon { color: var(--accent); }
+
+    .drop-text { font-size: 13px; color: var(--para); }
+    .drop-text strong { color: var(--text); }
+    .drop-link { color: var(--accent); text-decoration: underline; cursor: pointer; }
+    .drop-hint { font-size: 11px; color: var(--muted); }
+
+    .drop-zone.loaded {
+      border-color: rgba(61,164,77,.4);
+      background: rgba(61,164,77,.04);
+    }
+    .drop-zone.loaded .drop-icon { color: var(--green-lt); }
+
+    /* ── OR DIVIDER ── */
+    .or-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .or-divider::before, .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border2);
+    }
+
+    .host-cell {
+      color: var(--para);
+      font-size: 12px;
+    }
+
     @media (max-width: 640px) {
-      .wrap { padding: 32px 16px 60px; }
-      .card { padding: 18px; }
-      .btn-row { flex-direction: column; }
-      .btn { width: 100%; justify-content: center; }
+      th:nth-child(4), td:nth-child(4),
+      th:nth-child(5), td:nth-child(5),
+      th:nth-child(6), td:nth-child(6) { display: none; }
       .btn-export { margin-left: 0; }
-      #statsRow { grid-template-columns: 1fr 1fr; }
-      .table-header { padding: 14px 16px; }
-      th, td { padding: 10px 12px; }
+      .filter-section { gap: 14px; }
+    }
+    /* ── EXPANDABLE ROWS ── */
+    .data-row { cursor: pointer; }
+    .data-row:hover .row-chevron { color: var(--accent); }
+
+    .chevron-cell {
+      width: 32px;
+      text-align: center;
+      padding: 12px 8px !important;
+      color: var(--muted);
+    }
+
+    .row-chevron {
+      display: inline-block;
+      font-size: 16px;
+      line-height: 1;
+      transition: transform .25s ease, color .15s;
+      user-select: none;
+    }
+
+    .row-chevron.chevron-open { transform: rotate(90deg); color: var(--accent); }
+
+    .data-row.row-expanded { background: var(--surface2); }
+    .data-row.row-expanded td { border-bottom: none; }
+
+    .detail-row td { padding: 0 !important; border-bottom: none; }
+    .detail-row { display: none; }
+
+    /* The Grid trick for smooth height animation */
+    .detail-panel-wrapper {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      background: var(--bg);
+    }
+
+    .detail-panel-wrapper.is-open {
+      grid-template-rows: 1fr;
+    }
+
+    .detail-panel {
+      overflow: hidden;
+      display: flex;
+      gap: 0;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      border-top: 1px solid transparent;
+    }
+
+    .detail-panel-wrapper.is-open .detail-panel {
+      opacity: 1;
+      border-top-color: var(--border2);
+    }
+
+    .detail-section {
+      flex: 1;
+      padding: 16px 20px;
+      border-right: 1px solid var(--border);
+    }
+
+    .detail-section:last-child { border-right: none; }
+
+    .detail-section-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .detail-field {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      margin-bottom: 8px;
+    }
+
+    .detail-field:last-child { margin-bottom: 0; }
+
+    .detail-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+    }
+
+    .detail-val {
+      font-size: 12px;
+      color: var(--para);
+      word-break: break-word;
+    }
+
+    .detail-val a { color: var(--accent); text-decoration: none; }
+    .detail-val a:hover { text-decoration: underline; }
+
+    .detail-val-muted { color: var(--muted) !important; font-style: italic; font-size: 11px; }
+    .detail-val-available { color: var(--green-lt) !important; font-weight: 500; }
+
+    .detail-ns-list { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+    .detail-ns {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--para);
+      background: var(--surface2);
+      padding: 1px 6px;
+      border-radius: 3px;
+      width: fit-content;
+    }
+
+    /* ── CACHE BAR ── */
+    .cache-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--para);
+      margin-bottom: 16px;
+      padding: 0 2px;
+    }
+
+    .btn-cache-clear {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 2px 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color .15s;
+    }
+
+    .btn-cache-clear:hover { color: var(--red-lt); }
+
+    .cache-badge, .source-badge {
+      display: inline-block;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+      cursor: default;
+    }
+
+    .cache-badge {
+      color: var(--accent);
+      background: rgba(255,137,6,.1);
+      border: 1px solid rgba(255,137,6,.25);
+    }
+
+    .source-badge {
+      color: var(--para);
+      background: rgba(167,169,190,.08);
+      border: 1px solid rgba(167,169,190,.2);
+    }
+
+    /* ── INFO TOGGLE BUTTON ── */
+    .info-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 5px 11px;
+      cursor: pointer;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    .info-toggle:hover,
+    .info-toggle.active {
+      color: var(--accent);
+      border-color: rgba(255,137,6,.35);
+      background: rgba(255,137,6,.06);
+    }
+
+    /* ── INFO PANEL ── */
+    .info-panel {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height .35s ease, opacity .25s ease;
+      pointer-events: none;
+    }
+
+    .info-panel.open {
+      max-height: 1000px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .info-section {
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .info-section:nth-child(2n) { border-right: none; }
+    .info-section:nth-last-child(-n+2) { border-bottom: none; }
+
+    .info-section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .info-section-title svg { flex-shrink: 0; opacity: .7; }
+
+    .info-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .info-list-ol { counter-reset: info-counter; }
+
+    .info-list-ol li {
+      counter-increment: info-counter;
+      padding-left: 20px;
+      position: relative;
+    }
+
+    .info-list-ol li::before {
+      content: counter(info-counter);
+      position: absolute;
+      left: 0;
+      top: 1px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .info-list li { font-size: 12px; color: var(--para); line-height: 1.5; }
+
+    .info-list li code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    .info-list strong { color: var(--text); font-weight: 600; }
+
+    .info-pill {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-right: 4px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .pill-green  { background: rgba(61,164,77,.12);  color: var(--green-lt); border: 1px solid rgba(61,164,77,.25); }
+    .pill-red    { background: rgba(229,49,112,.12); color: var(--red-lt);   border: 1px solid rgba(229,49,112,.25); }
+    .pill-yellow { background: rgba(246,166,35,.12); color: var(--yellow);   border: 1px solid rgba(246,166,35,.25); }
+    .pill-orange { background: rgba(255,137,6,.1);   color: var(--accent);   border: 1px solid rgba(255,137,6,.25); }
+
+    /* ── FOOTER ── */
+    footer { margin-top: 44px; padding-bottom: 8px; }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .footer-inner strong { color: var(--para); }
+    .footer-inner a { color: var(--muted); text-decoration: none; }
+    .footer-inner a:hover { color: var(--accent); }
+    .footer-sep { opacity: .3; }
+
+    @media (max-width: 640px) {
+      .info-grid { grid-template-columns: 1fr; }
+      .info-section { border-right: none !important; border-bottom: 1px solid var(--border); }
+      .info-section:last-child { border-bottom: none !important; }
+      .footer-inner { flex-direction: column; gap: 4px; }
     }
   </style>
 </head>
 <body>
+  <div class="wrap" role="main" aria-label="BulkWHOIS domain checker">
 
-  <div class="wrap">
     <header>
-      <h1 class="logo">WHO<span>'S</span>WHO</h1>
-      <span class="badge">RDAP</span>
+      <span class="logo">Bulk<span>WHOIS</span></span>
+      <span class="badge">v1.0</span>
+      <button class="info-toggle" id="infoToggle" aria-expanded="false" aria-controls="infoPanel" title="How to use">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        How to use
+      </button>
     </header>
-    <p class="tagline">Bulk domain registration checker — entirely client-side, privacy-first</p>
-
-    <button class="info-toggle" id="infoToggle" aria-expanded="false">
-      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      How it works
-    </button>
+    <p class="tagline">Check domain registration status and EPP flags in bulk — any number of domains, processed in batches</p>
 
     <div class="info-panel" id="infoPanel">
-      <div class="info-content">
-        <h3>What is this?</h3>
-        <p><strong>WHO'SWHO</strong> checks domain registration status using the <strong>RDAP protocol</strong> (Registration Data Access Protocol) — the modern successor to WHOIS. Everything runs in your browser; no data is sent to any server except the official RDAP endpoints.</p>
+      <div class="info-grid">
 
-        <h3>How to use</h3>
-        <ul>
-          <li>Paste one domain per line in the text area, or drag and drop a <code>.txt</code> or <code>.csv</code> file</li>
-          <li>Click <strong>Check Domains</strong> to start the lookup</li>
-          <li>Results show availability, EPP status codes, registrar, expiry, and more</li>
-          <li>Export to CSV when done</li>
-        </ul>
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Getting Started
+          </div>
+          <ol class="info-list info-list-ol">
+            <li>Paste domains in the text area — one per line, or space/comma separated</li>
+            <li>Or drag &amp; drop a <code>.txt</code> or <code>.csv</code> file (domain column is auto-detected)</li>
+            <li>Click <strong>Check Domains</strong> — large lists are processed in batches of 50 with automatic pausing between batches to respect rate limits</li>
+            <li>Filter by status or EPP flag, then <strong>Export CSV</strong> if needed. Hit <strong>Cancel</strong> at any time to stop mid-run</li>
+          </ol>
+        </div>
 
-        <h3>Privacy & Caching</h3>
-        <p>Results are cached in your browser's local storage for <strong>24 hours</strong> to avoid redundant lookups. No external analytics or tracking. Clear the cache anytime using the button below the input area.</p>
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            Results Explained
+          </div>
+          <ul class="info-list">
+            <li><span class="info-pill pill-green">Available</span> Domain returned no RDAP record (404) — likely unregistered</li>
+            <li><span class="info-pill pill-red">Registered</span> Domain has an active RDAP record with registration data</li>
+            <li><span class="info-pill pill-yellow">Error</span> Lookup failed — registry may not support RDAP, or timed out</li>
+            <li><span class="info-pill pill-orange">cached</span> Result loaded from your local 24-hour cache — no API call made</li>
+          </ul>
+        </div>
 
-        <h3>EPP Status Codes</h3>
-        <p>EPP codes indicate a domain's state:</p>
-        <ul>
-          <li><code>clientTransferProhibited</code> — transfer to another registrar is locked</li>
-          <li><code>clientUpdateProhibited</code> — domain settings can't be changed</li>
-          <li><code>serverHold</code> — domain is suspended</li>
-          <li><code>pendingDelete</code> — domain is scheduled for deletion</li>
-        </ul>
-        <p>…and many more. You can filter results by EPP code after checking domains.</p>
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            EPP Status Flags
+          </div>
+          <ul class="info-list">
+            <li><span class="info-pill pill-red">clientHold / serverHold</span> Domain is suspended — DNS not resolving</li>
+            <li><span class="info-pill pill-red">pendingDelete</span> Queued for deletion — may drop soon</li>
+            <li><span class="info-pill pill-yellow">pendingTransfer</span> Transfer to another registrar in progress</li>
+            <li><span class="info-pill pill-green">ok / active</span> Domain is live with no restrictions</li>
+            <li>Hover any EPP tag in the results table for a plain-English explanation</li>
+          </ul>
+        </div>
 
-        <h3>Rate Limiting</h3>
-        <p>To avoid overwhelming RDAP servers, WHO'SWHO processes domains in batches with automatic pauses. The speed depends on how many domains you're checking and the responsiveness of each TLD's RDAP server.</p>
+        <div class="info-section">
+          <div class="info-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+            Technical Notes
+          </div>
+          <ul class="info-list">
+            <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
+            <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into batches of 50 to avoid overwhelming registries</li>
+            <li><strong>Hosting provider</strong> is detected by resolving the domain's <strong>A records</strong> via Cloudflare DoH, then looking up the IP via <strong>ipwho.is</strong> (with <strong>ipinfo.io</strong> as a fallback). If proxying is detected, it falls back to NS pattern matching.</li>
+            <li><strong>ccTLD Coverage:</strong> RDAP coverage is excellent for gTLDs (.com, .net, .app), but many ccTLDs (like .uk, .de, .au) strictly use legacy WHOIS port 43 and may return errors here.</li>
+            <li>All lookups run entirely in your browser — <strong>no data is sent to any server owned by this tool</strong></li>
+          </ul>
+        </div>
+
       </div>
-    </div>
-
-    <div class="cache-info">
-      <span>Cached entries:</span>
-      <span class="cache-count" id="cacheCount">0</span>
-      <button class="cache-clear" id="cacheClearBtn">Clear cache</button>
     </div>
 
     <div class="card">
       <div class="card-label">Domain List</div>
-      <textarea
-        id="domainInput"
-        placeholder="example.com&#10;another-domain.io&#10;test.co.uk&#10;…"
-        aria-label="Enter domains to check, one per line"
-      ></textarea>
 
-      <div
-        class="drop-zone"
-        id="dropZone"
-        tabindex="0"
-        role="button"
-        aria-label="Drop a text or CSV file here, or click to browse"
-      >
+      <div class="drop-zone" id="dropZone"
+           role="button"
+           tabindex="0"
+           aria-label="Upload domain list file — click or drag and drop a .txt or .csv file">
+        <input type="file" id="fileInput" accept=".txt,.csv" style="display:none" aria-hidden="true" tabindex="-1" />
+        <div class="drop-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
         <div class="drop-text">Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span></div>
         <div class="drop-hint">One domain per line · CSV column auto-detected</div>
       </div>
-      <input type="file" id="fileInput" accept=".txt,.csv" style="display:none;" aria-hidden="true" />
+
+      <div class="or-divider"><span>or type manually</span></div>
+
+      <textarea id="domainInput"
+                aria-label="Domain list input"
+                placeholder="example.com&#10;myproject.io&#10;coolbrand.net&#10;&#10;One per line — any number of domains. Large lists are processed in batches."></textarea>
 
       <div class="btn-row">
-        <button class="btn btn-primary" id="runBtn">
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <button class="btn btn-primary" id="runBtn" aria-label="Check domains">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           Check Domains
         </button>
-        <button class="btn btn-ghost" id="cancelBtn" disabled>
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-          Cancel
-        </button>
-        <button class="btn btn-ghost" id="clearBtn">
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-          Clear All
-        </button>
-        <button class="btn btn-export" id="exportBtn" disabled>
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <button class="btn btn-ghost" id="clearBtn" aria-label="Clear all domains">Clear</button>
+        <button class="btn btn-export" id="exportBtn" disabled aria-label="Export results as CSV">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Export CSV
         </button>
       </div>
     </div>
 
-    <div id="progressWrap" role="status" aria-live="polite">
-      <div class="progress-info">
-        <span class="progress-label" id="progressLabel">Starting…</span>
-        <span class="progress-batch" id="progressBatch"></span>
+    <div class="cache-bar">
+      <span id="cacheInfo" style="opacity:.4">Cache empty</span>
+      <button class="btn-cache-clear" id="cacheClearBtn">Clear cache</button>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap" role="region" aria-label="Check progress">
+      <div class="progress-header" aria-live="polite" aria-atomic="true">
+        <span id="progressLabel">Checking...</span>
+        <div class="progress-right">
+          <span id="progressBatch" class="progress-batch"></span>
+          <span id="progressCount">0 / 0</span>
+          <button class="btn-cancel" id="cancelBtn" aria-label="Cancel domain checking">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Cancel
+          </button>
+        </div>
       </div>
-      <div class="progress-bar-bg" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div id="progressBar"></div>
+      <div class="progress-bar-bg" role="progressbar" aria-labelledby="progressLabel" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar" id="progressBar"></div>
       </div>
     </div>
 
-    <div id="statsRow"></div>
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat-pill all"><span class="dot dot-muted"></span><span id="statTotal">0</span> total</div>
+      <div class="stat-pill reg"><span class="dot dot-red"></span><span id="statReg">0</span> registered</div>
+      <div class="stat-pill avail"><span class="dot dot-green"></span><span id="statAvail">0</span> available</div>
+      <div class="stat-pill err"><span class="dot dot-yellow"></span><span id="statErr">0</span> errors</div>
+    </div>
 
-    <div id="filterSection">
+    <div class="filter-section" id="filterSection" style="display:none">
       <div class="filter-group">
-        <div class="filter-label">Filter by Status</div>
-        <div class="filter-bar" id="statusFilterBar" role="group" aria-label="Status filter buttons"></div>
+        <div class="filter-group-label">Status</div>
+        <div class="filter-bar" id="statusFilterBar">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="registered">Registered</button>
+          <button class="filter-btn" data-filter="available">Available</button>
+          <button class="filter-btn" data-filter="error">Errors</button>
+        </div>
       </div>
-      <div class="filter-group" id="eppFilterGroup">
-        <div class="filter-label">Filter by EPP Code</div>
-        <div class="filter-bar" id="eppFilterBar" role="group" aria-label="EPP code filter buttons"></div>
+      <div class="filter-group" id="eppFilterGroup" style="display:none">
+        <div class="filter-group-label">EPP Flag</div>
+        <div class="filter-bar" id="eppFilterBar">
+          </div>
       </div>
     </div>
 
@@ -861,840 +1169,1403 @@
         <p>Enter domains above and click <strong>Check Domains</strong></p>
       </div>
     </div>
+
   </div>
 
-  <div id="toast" role="alert" aria-live="assertive"></div>
+  <footer>
+    <div class="footer-inner">
+      <span>BulkWHOIS &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener noreferrer"><strong>ianos</strong></a></span>
+      <span class="footer-sep">·</span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a> &amp; <a href="https://ip-api.com" target="_blank" rel="noopener noreferrer">ip-api.com</a></span>
+      <span class="footer-sep">·</span>
+      <span>No data stored &nbsp;·&nbsp; MIT License</span>
+    </div>
+  </footer>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
-    'use strict';
-
     // ─────────────────────────────────────────────────────────────────────────
-    // GLOBALS
+    // STATE
     // ─────────────────────────────────────────────────────────────────────────
-
-    const $ = id => document.getElementById(id);
-
-    let results = [];
-    let running = false;
-    let _cancelRequested = false;
-
-    // Cache store key
-    const CACHE_KEY = 'whoswho_rdap_cache';
-    const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-
-    // Batching config
-    const BATCH_SIZE  = 20;
-    const BATCH_PAUSE = 3000; // ms between batches
-
-    // Filters
+    let results            = [];
     let currentStatusFilter = 'all';
-    let currentEPPFilter    = null;
-    let _eppBarListenerController = null;
-
-    // Public Suffix List
-    let PSL_RULES = null;
+    let currentEPPFilter   = null;
+    let running            = false;
+    let renderRafId        = null;
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PUBLIC SUFFIX LIST LOADING
+    // CONSTANTS
     // ─────────────────────────────────────────────────────────────────────────
+    const BATCH_SIZE    = 50;          // domains processed per batch
+    const BATCH_PAUSE   = 4000;        // ms to wait between batches (respectful to registries)
+    const MAX_LABEL     = 63;          // RFC 1035
+    const MAX_FQDN      = 253;         // RFC 1035
+    const CACHE_KEY     = 'bulkwhois_cache';
+    const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
+
+    // Rate limiter: max N requests per window (ms)
+    const RL_MAX      = 5;
+    const RL_WINDOW   = 2000;   // 5 req / 2 s  →  2.5 req/s sustained
+    const RETRY_DELAY = 3000;   // wait 3 s on 429 before retry
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC SUFFIX LIST (PSL) CACHE & PARSER
+    // ─────────────────────────────────────────────────────────────────────────
+    const pslExact = new Set();
+    const pslWildcard = new Set();
+    const pslException = new Set();
 
     async function initPSL() {
-      try {
-        const resp = await fetch('https://publicsuffix.org/list/public_suffix_list.dat');
-        const text = await resp.text();
-        
-        PSL_RULES = {
-          normal: new Set(),
-          wildcard: new Set(),
-          exception: new Set()
-        };
+      const CACHE_KEY = 'psl_cache_v1';
+      let data = sessionStorage.getItem(CACHE_KEY);
 
-        text.split('\n').forEach(line => {
-          line = line.trim();
-          if (!line || line.startsWith('//')) return;
-          
-          if (line.startsWith('!')) {
-            PSL_RULES.exception.add(line.slice(1).toLowerCase());
-          } else if (line.startsWith('*.')) {
-            PSL_RULES.wildcard.add(line.slice(2).toLowerCase());
-          } else {
-            PSL_RULES.normal.add(line.toLowerCase());
-          }
-        });
-      } catch (err) {
-        console.error('Failed to load PSL:', err);
-        showToast('⚠ Could not load domain rules — some TLDs may not work correctly');
+      if (!data) {
+        try {
+          // Fetch the official raw list
+          const res = await fetch('https://raw.githubusercontent.com/publicsuffix/list/master/public_suffix_list.dat');
+          if (!res.ok) throw new Error('Fetch failed');
+          const text = await res.text();
+
+          // Ignore comments and blank lines
+          const rules = text.split('\n')
+            .map(l => l.trim().toLowerCase())
+            .filter(l => l && !l.startsWith('//'));
+
+          // Cache as JSON in sessionStorage (loads instantly on next refresh)
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(rules));
+          data = JSON.stringify(rules);
+        } catch (e) {
+          console.warn('Could not load PSL. Subdomain stripping will use basic heuristic.', e);
+          return;
+        }
+      }
+
+      // Populate our Sets for lightning-fast O(1) lookups during batch processing
+      const rules = JSON.parse(data);
+      for (const rule of rules) {
+        if (rule.startsWith('!')) {
+          pslException.add(rule.slice(1));
+        } else if (rule.startsWith('*.')) {
+          pslWildcard.add(rule.slice(2));
+        } else {
+          pslExact.add(rule);
+        }
       }
     }
 
-    function getPublicSuffix(domain) {
-      if (!PSL_RULES) return null;
-      
-      const parts = domain.toLowerCase().split('.');
-      
-      // Check exceptions first (e.g., ck.uk)
-      for (let i = 0; i < parts.length - 1; i++) {
-        const suffix = parts.slice(i).join('.');
-        if (PSL_RULES.exception.has(suffix)) {
-          return parts.slice(i + 1).join('.');
+    // Strips subdomains to return the true registrable root domain
+    function getRootDomain(domain) {
+      // Fallback heuristic if the GitHub fetch failed (e.g., offline)
+      if (!pslExact.size) {
+        const p = domain.split('.');
+        if (p.length > 2 && p[p.length-1].length === 2 && ['co','com','org','net','edu','gov','ac'].includes(p[p.length-2])) {
+          return p.slice(-3).join('.');
         }
+        return p.slice(-2).join('.');
       }
-      
-      // Check exact matches and wildcards
-      for (let i = 0; i < parts.length - 1; i++) {
-        const suffix = parts.slice(i).join('.');
-        
-        // Exact match
-        if (PSL_RULES.normal.has(suffix)) {
-          return suffix;
-        }
-        
-        // Wildcard match (e.g., *.uk for co.uk)
-        if (i < parts.length - 1) {
-          const parent = parts.slice(i + 1).join('.');
-          if (PSL_RULES.wildcard.has(parent)) {
-            return suffix;
-          }
-        }
-      }
-      
-      // Fallback to last part
-      return parts[parts.length - 1];
-    }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // DOMAIN VALIDATION & NORMALIZATION
-    // ─────────────────────────────────────────────────────────────────────────
-
-    function isValidDomain(domain) {
-      // Improved validation for edge cases
-      if (!domain || typeof domain !== 'string') return false;
-      
-      domain = domain.trim().toLowerCase();
-      
-      // Check total length (max 253 chars for full domain)
-      if (domain.length > 253) return false;
-      
-      // Must have at least one dot
-      if (!domain.includes('.')) return false;
-      
-      // Check each label
       const labels = domain.split('.');
-      
-      // Must have at least 2 labels (domain + TLD)
-      if (labels.length < 2) return false;
-      
-      // Validate each label
-      for (const label of labels) {
-        // Empty labels not allowed
-        if (!label || label.length === 0) return false;
-        
-        // Max 63 chars per label
-        if (label.length > 63) return false;
-        
-        // Can't start or end with hyphen
-        if (label.startsWith('-') || label.endsWith('-')) return false;
-        
-        // Only alphanumeric and hyphens (for ASCII domains)
-        // This also implicitly allows punycode (xn--) domains
-        if (!/^[a-z0-9-]+$/.test(label)) return false;
-      }
-      
-      // TLD must be at least 2 chars
-      const tld = labels[labels.length - 1];
-      if (tld.length < 2) return false;
-      
-      return true;
-    }
+      let matchLen = 0; // Tracks how many labels make up the public suffix
 
-    function normalizeDomain(input) {
-      if (!input) return null;
-      
-      let domain = input.trim().toLowerCase();
-      
-      // Strip common prefixes people might paste
-      domain = domain.replace(/^https?:\/\//i, '');
-      domain = domain.replace(/^www\./i, '');
-      
-      // Strip port numbers
-      domain = domain.replace(/:\d+$/, '');
-      
-      // Strip trailing slashes and paths
-      domain = domain.split('/')[0];
-      domain = domain.split('?')[0];
-      domain = domain.split('#')[0];
-      
-      // Remove any whitespace that snuck through
-      domain = domain.replace(/\s/g, '');
-      
-      // Handle punycode conversion if needed (for internationalized domains)
-      // Browser's URL API can help validate and normalize
-      try {
-        const url = new URL(`http://${domain}`);
-        domain = url.hostname;
-      } catch (e) {
-        // If URL parsing fails, continue with the cleaned string
+      // Iterate from the top-level down
+      for (let i = labels.length - 1; i >= 0; i--) {
+        const suffix = labels.slice(i).join('.');
+        
+        if (pslException.has(suffix)) {
+          // Exceptions (like !www.ck) mean the suffix ITSELF is the registrable domain
+          matchLen = labels.length - i - 1;
+          break;
+        }
+
+        const parentSuffix = labels.slice(i + 1).join('.');
+        if (pslExact.has(suffix) || pslWildcard.has(parentSuffix)) {
+           matchLen = labels.length - i;
+        }
       }
-      
-      if (!isValidDomain(domain)) return null;
-      
-      // Extract the registrable domain (remove subdomains, but handle edge cases)
-      const publicSuffix = getPublicSuffix(domain);
-      if (!publicSuffix) return domain; // Fallback to original
-      
-      const parts = domain.split('.');
-      const suffixParts = publicSuffix.split('.');
-      
-      // The registrable domain is the public suffix plus one more label
-      // e.g., "example.co.uk" for "www.example.co.uk" where public suffix is "co.uk"
-      if (parts.length > suffixParts.length) {
-        return parts.slice(-(suffixParts.length + 1)).join('.');
+
+      // The root domain is the Public Suffix + 1 label to the left
+      if (matchLen > 0 && matchLen < labels.length) {
+         return labels.slice(labels.length - matchLen - 1).join('.');
       }
       
       return domain;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // RDAP SERVER LOOKUP
+    // INPUT VALIDATION & SANITIZATION
     // ─────────────────────────────────────────────────────────────────────────
 
-    function rdapServer(domain) {
-      const tld = domain.split('.').pop().toLowerCase();
-      
-      // Enhanced TLD mapping with better coverage for uncommon TLDs
-      const overrides = {
-        // Common generic TLDs
-        'com': 'https://rdap.verisign.com/com/v1/',
-        'net': 'https://rdap.verisign.com/net/v1/',
-        'org': 'https://rdap.publicinterestregistry.org/rdap/',
-        'info': 'https://rdap.afilias-srs.net/rdap/info/',
-        'biz': 'https://rdap.afilias-srs.net/rdap/biz/',
-        
-        // Country code TLDs with special handling
-        'io': 'https://rdap.nic.io/',
-        'sh': 'https://rdap.nic.sh/',
-        'ac': 'https://rdap.nic.ac/',
-        'ai': 'https://rdap.nic.ai/',
-        'co': 'https://rdap.nic.co/',
-        'me': 'https://rdap.nic.me/',
-        'tv': 'https://rdap.nic.tv/',
-        'cc': 'https://rdap.nic.cc/',
-        'gg': 'https://rdap.gg/',
-        'je': 'https://rdap.je/',
-        'im': 'https://rdap.im/',
-        
-        // New gTLDs popular for tech
-        'dev': 'https://rdap.nic.google/',
-        'app': 'https://rdap.nic.google/',
-        'tech': 'https://rdap.nic.tech/',
-        'xyz': 'https://rdap.centralnic.com/xyz/',
-        'online': 'https://rdap.centralnic.com/online/',
-        'site': 'https://rdap.centralnic.com/site/',
-        'store': 'https://rdap.centralnic.com/store/',
-        'cloud': 'https://rdap.centralnic.com/cloud/',
-        'ai': 'https://rdap.nic.ai/',
-        
-        // UK domains
-        'uk': 'https://rdap.nominet.uk/uk/',
-        
-        // European TLDs
-        'de': 'https://rdap.denic.de/',
-        'fr': 'https://rdap.nic.fr/',
-        'nl': 'https://rdap.sidn.nl/',
-        'be': 'https://rdap.dns.be/',
-        'it': 'https://rdap.nic.it/',
-        'es': 'https://rdap.nic.es/',
-        'ch': 'https://rdap.nic.ch/',
-        'at': 'https://rdap.nic.at/',
-        'se': 'https://rdap.internetstiftelsen.se/',
-        'no': 'https://rdap.norid.no/',
-        'dk': 'https://rdap.dk-hostmaster.dk/',
-        'fi': 'https://rdap.fi/',
-        'pl': 'https://rdap.dns.pl/',
-        'cz': 'https://rdap.nic.cz/',
-        
-        // Asia-Pacific
-        'au': 'https://rdap.audns.net.au/',
-        'nz': 'https://rdap.srs.net.nz/',
-        'jp': 'https://rdap.jprs.jp/',
-        'cn': 'https://rdap.cnnic.cn/',
-        'in': 'https://rdap.registry.in/',
-        'sg': 'https://rdap.sgnic.sg/',
-        'hk': 'https://rdap.hkirc.hk/',
-        'kr': 'https://rdap.kr/',
-        
-        // Americas
-        'ca': 'https://rdap.ca.fury.ca/rdap/',
-        'us': 'https://rdap.nic.us/',
-        'mx': 'https://rdap.mx/',
-        'br': 'https://rdap.registro.br/',
-        'ar': 'https://rdap.nic.ar/',
-        'cl': 'https://rdap.nic.cl/',
-        
-        // Middle East & Africa
-        'ae': 'https://rdap.nic.ae/',
-        'za': 'https://rdap.za.net/',
-        'il': 'https://rdap.isoc.org.il/',
-      };
-      
-      if (overrides[tld]) {
-        return overrides[tld];
-      }
-      
-      // Fallback to IANA bootstrap service for other TLDs
-      // This will redirect to the appropriate RDAP server
-      return `https://rdap.org/domain/${encodeURIComponent(domain)}`;
-    }
+    /**
+     * Sanitize and validate a single raw domain token.
+     * Returns { ok: true, domain } or { ok: false, reason }.
+     */
+    function sanitizeDomain(raw) {
+      if (typeof raw !== 'string') return { ok: false, reason: 'not a string' };
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // CACHE
-    // ─────────────────────────────────────────────────────────────────────────
+      let d = raw.trim().toLowerCase();
 
-    function getCacheKey(domain) {
-      return `rdap:${domain.toLowerCase()}`;
-    }
-
-    function getCachedResult(domain) {
+      // 1. Force through the browser's native URL parser to handle IDNs gracefully
       try {
-        const stored = localStorage.getItem(CACHE_KEY);
-        if (!stored) return null;
-        
-        const cache = JSON.parse(stored);
-        const key = getCacheKey(domain);
-        const entry = cache[key];
-        
-        if (!entry) return null;
-        if (Date.now() - entry.timestamp > CACHE_EXPIRY) {
-          delete cache[key];
-          localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-          return null;
+        const withProtocol = d.match(/^https?:\/\//i) ? d : `http://${d}`;
+        d = new URL(withProtocol).hostname;
+      } catch {
+        return { ok: false, reason: 'invalid URL' };
+      }
+
+      // 2. Strip leading www.
+      d = d.replace(/^www\./, '');
+
+      // 3. Strip subdomains using the Public Suffix List
+      d = getRootDomain(d);
+
+      // 4. Skip blank lines and comment lines
+      if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
+
+      // 5. Must not exceed RFC max length
+      if (d.length > MAX_FQDN) return { ok: false, reason: `exceeds ${MAX_FQDN} chars` };
+
+      // 6. Must have at least one dot
+      if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
+
+      // 7. Validate each label (Now safely allows punycode)
+      const labels = d.split('.');
+      for (const label of labels) {
+        if (!label) return { ok: false, reason: 'empty label' };
+        if (label.length > MAX_LABEL) return { ok: false, reason: `label too long: ${label}` };
+        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(label) && !/^xn--[a-z0-9-]+$/.test(label)) {
+          return { ok: false, reason: `invalid label: ${label}` };
         }
-        
-        return { ...entry.data, fromCache: true };
-      } catch (e) {
-        console.error('Cache read error:', e);
+      }
+
+      // 8. TLD must be at least 2 chars and all alpha OR a punycode TLD
+      const tld = labels[labels.length - 1];
+      if (!/^[a-z]{2,}$/.test(tld) && !/^xn--[a-z0-9-]+$/.test(tld)) {
+         return { ok: false, reason: `invalid TLD: ${tld}` };
+      }
+
+      return { ok: true, domain: d };
+    }
+
+    /**
+     * Parse raw textarea/file text into validated unique domains.
+     * Returns { valid: string[], skipped: { raw, reason }[] }
+     * No hard cap — all valid domains are returned; queue handles batching.
+     */
+    function parseAndValidateDomains(text) {
+      // Normalize separators: commas, spaces, and newlines all accepted
+      const normalized = text
+        .replace(/,/g, '\n')
+        .replace(/[ \t]+/g, '\n');
+
+      const lines  = normalized.split(/\r?\n/);
+      const valid   = [];
+      const skipped = [];
+      const seen    = new Set();
+
+      for (const line of lines) {
+        const r = sanitizeDomain(line);
+        if (!r.ok) {
+          if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
+          continue;
+        }
+        if (seen.has(r.domain)) continue; // silently deduplicate
+        seen.add(r.domain);
+        valid.push(r.domain);
+      }
+      return { valid, skipped };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RATE LIMITER  (token-bucket style, browser-side)
+    // ─────────────────────────────────────────────────────────────────────────
+    const rateLimiter = (() => {
+      const timestamps = []; // ring buffer of recent request times
+
+      return {
+        /** Returns a Promise that resolves when it's safe to fire the next request. */
+        async wait() {
+          const now = Date.now();
+          // Drop timestamps older than window
+          while (timestamps.length && now - timestamps[0] >= RL_WINDOW) timestamps.shift();
+
+          if (timestamps.length >= RL_MAX) {
+            // Must wait until the oldest slot expires
+            const waitMs = RL_WINDOW - (now - timestamps[0]) + 10;
+            await sleep(waitMs);
+            // Recurse after waiting (slots may have freed)
+            return this.wait();
+          }
+          timestamps.push(Date.now());
+        },
+
+        /** Call on 429 — back off and drain the bucket */
+        async backoff() {
+          timestamps.length = 0; // reset bucket
+          await sleep(RETRY_DELAY);
+        }
+      };
+    })();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CACHE  (single in-memory object, flushed to localStorage as a batch)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Load once at startup — avoids repeated JSON.parse on every lookup
+    let _cacheStore = (() => {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+      catch { return {}; }
+    })();
+
+    // Debounced flush — coalesces rapid writes into one localStorage.setItem
+    let _cacheFlushTimer = null;
+    function _scheduleCacheFlush() {
+      clearTimeout(_cacheFlushTimer);
+      _cacheFlushTimer = setTimeout(() => {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore));
+        } catch (e) {
+          if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+            // Prune oldest 25% of entries and retry once
+            const entries = Object.entries(_cacheStore).sort((a, b) => a[1].ts - b[1].ts);
+            const pruneCount = Math.max(1, Math.floor(entries.length * 0.25));
+            for (let i = 0; i < pruneCount; i++) delete _cacheStore[entries[i][0]];
+            try { localStorage.setItem(CACHE_KEY, JSON.stringify(_cacheStore)); } catch { /* give up */ }
+          }
+        }
+      }, 300);
+    }
+
+    function cacheGet(domain) {
+      const entry = _cacheStore[domain];
+      if (!entry) return null;
+      if (Date.now() - entry.ts > CACHE_TTL_MS) {
+        delete _cacheStore[domain];
+        _scheduleCacheFlush();
         return null;
       }
+      return entry.data;
     }
 
-    function setCachedResult(domain, data) {
-      try {
-        const stored = localStorage.getItem(CACHE_KEY);
-        const cache = stored ? JSON.parse(stored) : {};
-        
-        cache[getCacheKey(domain)] = {
-          timestamp: Date.now(),
-          data: { ...data, fromCache: false }
-        };
-        
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-      } catch (e) {
-        console.error('Cache write error:', e);
-      }
-    }
-
-    function getCacheSize() {
-      try {
-        const stored = localStorage.getItem(CACHE_KEY);
-        if (!stored) return 0;
-        return Object.keys(JSON.parse(stored)).length;
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    function updateCacheInfo() {
-      const count = getCacheSize();
-      $('cacheCount').textContent = count;
+    function cacheSet(domain, data) {
+      _cacheStore[domain] = { ts: Date.now(), data };
+      _scheduleCacheFlush();
     }
 
     function cacheClear() {
-      if (running) return;
-      try {
-        localStorage.removeItem(CACHE_KEY);
-        updateCacheInfo();
-        showToast('✓ Cache cleared');
-      } catch (e) {
-        showToast('⚠ Could not clear cache');
-      }
+      _cacheStore = {};
+      clearTimeout(_cacheFlushTimer);
+      try { localStorage.removeItem(CACHE_KEY); } catch {}
+      updateCacheInfo();
+      showToast('Cache cleared');
+    }
+
+    function cacheValidCount() {
+      const now = Date.now();
+      return Object.values(_cacheStore).filter(v => now - v.ts <= CACHE_TTL_MS).length;
+    }
+
+    function updateCacheInfo() {
+      const el = document.getElementById('cacheInfo');
+      if (!el) return;
+      const n = cacheValidCount();
+      if (n === 0) { el.textContent = 'Cache empty'; el.style.opacity = '.4'; }
+      else         { el.textContent = `${n} domain${n !== 1 ? 's' : ''} cached`; el.style.opacity = '1'; }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // RDAP LOOKUP
+    // ABORT SIGNAL POLYFILL  (Safari < 16 doesn't have AbortSignal.timeout)
     // ─────────────────────────────────────────────────────────────────────────
+    function makeSignal(ms) {
+      if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), ms);
+      return ctrl.signal;
+    }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // IANA RDAP BOOTSTRAP  (TLD → authoritative RDAP base URL)
+    // Cached in memory for the session so we only fetch dns.json once.
+    // ─────────────────────────────────────────────────────────────────────────
+    let _rdapBootstrap = null;       // Map<tld, baseUrl> once loaded
+    let _rdapBootstrapFetch = null;  // in-flight Promise — prevents duplicate fetches
+
+    async function getRDAPBase(tld) {
+      if (!_rdapBootstrap) {
+        // Coalesce concurrent callers onto the same fetch
+        if (!_rdapBootstrapFetch) {
+          _rdapBootstrapFetch = (async () => {
+            try {
+              const res = await fetch('https://data.iana.org/rdap/dns.json', { signal: makeSignal(6000) });
+              if (res.ok) {
+                const json = await res.json();
+                const map = new Map();
+                for (const [tlds, urls] of json.services) {
+                  for (const t of tlds) map.set(t.toLowerCase(), urls[0]);
+                }
+                _rdapBootstrap = map;
+              }
+            } catch { /* fall back to rdap.org proxy */ }
+            if (!_rdapBootstrap) _rdapBootstrap = new Map(); // empty sentinel
+            _rdapBootstrapFetch = null;
+          })();
+        }
+        await _rdapBootstrapFetch;
+      }
+      return _rdapBootstrap.get(tld.toLowerCase()) || null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RDAP FETCH  (primary: direct registry RDAP, fallback: rdap.org proxy)
+    // ─────────────────────────────────────────────────────────────────────────
     async function checkDomain(domain) {
-      // Check cache first
-      const cached = getCachedResult(domain);
-      if (cached) return cached;
+      // 1. Cache hit
+      const cached = cacheGet(domain);
+      if (cached) return { ...cached, fromCache: true };
 
-      const result = {
-        domain,
-        status: 'checking',
-        eppCodes: [],
-        registrar: '',
-        expiry: '',
-        hostingProvider: '',
-        source: '',
-        fromCache: false
-      };
+      // 2. Rate-limit gate
+      await rateLimiter.wait();
+
+      // 3. Try direct registry RDAP via IANA bootstrap first,
+      //    then fall back to rdap.org proxy if bootstrap fails or TLD unknown.
+      const tld = domain.split('.').pop();
+      const registryBase = await getRDAPBase(tld);
+
+      let result = await fetchRDAP(domain, registryBase);
+
+      // 4. If direct registry RDAP failed, try rdap.org as a proxy fallback
+      if (result._failed && registryBase) {
+        await rateLimiter.wait();
+        result = await fetchRDAP(domain, null); // null → use rdap.org
+      }
+
+      // 5. Cache successful results only
+      if (!result._failed) {
+        const { _failed, ...clean } = result;
+        // 5a. For registered domains, try to detect hosting provider
+        if (clean.status === 'registered') {
+          const hostInfo = await detectHostingProvider(domain);
+          clean.hostingProvider = hostInfo?.org || null;
+          clean.hostAsn         = hostInfo?.asn || null;
+          clean.hostAbuse       = hostInfo?.abuse || null;
+        } else {
+          clean.hostingProvider = null;
+          clean.hostAsn         = null;
+          clean.hostAbuse       = null;
+        }
+        cacheSet(domain, clean);
+        return { ...clean, fromCache: false };
+      }
+
+      // Return the error result as-is (don't cache errors)
+      const { _failed, ...errResult } = result;
+      errResult.hostingProvider = null;
+      return { ...errResult, fromCache: false };
+    }
+
+    async function fetchRDAP(domain, registryBase) {
+      // registryBase=null → use rdap.org proxy (handles CORS itself)
+      // registryBase='https://rdap.verisign.com/com/v1/' → direct registry
+      const base = registryBase
+        ? registryBase.replace(/\/$/, '')
+        : 'https://rdap.org';
+      const url = `${base}/domain/${encodeURIComponent(domain)}`;
 
       try {
-        const server = rdapServer(domain);
-        const url = server.endsWith('/') 
-          ? `${server}domain/${encodeURIComponent(domain)}`
-          : `${server}`;
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
-        const resp = await fetch(url, {
-          signal: controller.signal,
-          headers: { 'Accept': 'application/rdap+json' }
+        const res = await fetch(url, {
+          signal: makeSignal(10000),
+          // 'omit' credentials avoids CORS preflight on cross-origin RDAP servers
+          credentials: 'omit',
         });
 
-        clearTimeout(timeoutId);
-
-        if (resp.status === 404) {
-          result.status = 'available';
-          result.source = new URL(server).hostname;
-        } else if (resp.ok) {
-          const data = await resp.json();
-          result.status = 'registered';
-          result.source = new URL(server).hostname;
-
-          // Parse EPP status codes
-          if (data.status && Array.isArray(data.status)) {
-            result.eppCodes = data.status.map(s => {
-              // Extract code from "clientTransferProhibited https://icann.org/epp#clientTransferProhibited"
-              return s.split(' ')[0];
-            });
-          }
-
-          // Registrar
-          if (data.entities && Array.isArray(data.entities)) {
-            const registrar = data.entities.find(e => 
-              e.roles && e.roles.includes('registrar')
-            );
-            if (registrar && registrar.vcardArray) {
-              const vcard = registrar.vcardArray[1];
-              const fnField = vcard.find(f => f[0] === 'fn');
-              if (fnField) result.registrar = fnField[3];
-            }
-          }
-
-          // Expiry date
-          if (data.events && Array.isArray(data.events)) {
-            const expiry = data.events.find(e => e.eventAction === 'expiration');
-            if (expiry && expiry.eventDate) {
-              result.expiry = new Date(expiry.eventDate).toISOString().split('T')[0];
-            }
-          }
-
-          // Nameservers (for hosting provider inference)
-          if (data.nameservers && Array.isArray(data.nameservers)) {
-            const ns = data.nameservers.map(n => n.ldhName || '').filter(Boolean);
-            if (ns.length > 0) {
-              // Infer hosting provider from nameserver patterns
-              const nsStr = ns.join(' ').toLowerCase();
-              if (nsStr.includes('cloudflare')) result.hostingProvider = 'Cloudflare';
-              else if (nsStr.includes('awsdns')) result.hostingProvider = 'AWS Route 53';
-              else if (nsStr.includes('googledomains') || nsStr.includes('google')) result.hostingProvider = 'Google';
-              else if (nsStr.includes('azure') || nsStr.includes('microsoft')) result.hostingProvider = 'Microsoft';
-              else if (nsStr.includes('namecheap')) result.hostingProvider = 'Namecheap';
-              else if (nsStr.includes('godaddy')) result.hostingProvider = 'GoDaddy';
-              else result.hostingProvider = ns[0].split('.').slice(-2, -1)[0] || '';
-            }
-          }
-        } else {
-          result.status = 'error';
-          result.registrar = `HTTP ${resp.status}`;
+        // RDAP servers sometimes return 200 with an errorCode body
+        if (res.status === 404) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
         }
-      } catch (err) {
-        console.error(`RDAP error for ${domain}:`, err);
-        result.status = 'error';
-        
-        if (err.name === 'AbortError') {
-          result.registrar = 'Timeout';
-        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-          result.registrar = 'Network error';
-        } else {
-          result.registrar = err.message.slice(0, 50);
+
+        if (res.status === 429) {
+          await rateLimiter.backoff();
+          // After backoff the bucket is empty — acquire one fresh token
+          await rateLimiter.wait();
+          const retry = await fetch(url, { signal: makeSignal(10000), credentials: 'omit' });
+          if (retry.status === 404) {
+            return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
+          }
+          if (!retry.ok) return _rdapError(domain, `RDAP ${retry.status}`);
+          let retryData;
+          try { retryData = await retry.json(); } catch { return _rdapError(domain, 'RDAP invalid JSON on retry'); }
+          if (retryData.errorCode) return _rdapError(domain, `RDAP error ${retryData.errorCode}`);
+          return parseRDAPResponse(domain, retryData);
+        }
+
+        if (!res.ok) return _rdapError(domain, `RDAP ${res.status}`);
+
+        let data;
+        try { data = await res.json(); }
+        catch { return _rdapError(domain, 'RDAP invalid JSON response'); }
+
+        // Check for RDAP-level error embedded in a 200 response
+        if (data.errorCode) {
+          if (data.errorCode === 404) {
+            return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'RDAP' };
+          }
+          return _rdapError(domain, `RDAP error ${data.errorCode}`);
+        }
+
+        return parseRDAPResponse(domain, data);
+
+      } catch (e) {
+        const reason = (e.name === 'TimeoutError' || e.name === 'AbortError')
+          ? 'RDAP timeout'
+          : `RDAP: ${e.message.slice(0, 50)}`;
+        return _rdapError(domain, reason);
+      }
+    }
+
+    function _rdapError(domain, reason) {
+      return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], source: 'RDAP', _failed: true };
+    }
+
+    function parseRDAPResponse(domain, data) {
+      return {
+        domain,
+        status:       'registered',
+        registrar:    extractRegistrar(data),
+        expiry:       extractExpiry(data),
+        eppCodes:     extractEPP(data),
+        source:       'RDAP',
+        abuseEmail:   extractAbuseEmail(data),
+        abusePhone:   extractAbusePhone(data),
+        ianaId:       extractIanaId(data),
+        registrarUrl: extractRegistrarUrl(data),
+        created:      extractEventDate(data, 'registration'),
+        updated:      extractEventDate(data, 'last changed'),
+        nameservers:  extractNameservers(data),
+      };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXTRACTORS  (RDAP)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function extractRegistrar(data) {
+      if (!Array.isArray(data.entities)) return '—';
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar')) {
+          // vCard fn field
+          if (Array.isArray(e.vcardArray?.[1])) {
+            for (const v of e.vcardArray[1]) {
+              if (v[0] === 'fn' && v[3]) return String(v[3]);
+            }
+          }
+          if (e.handle) return String(e.handle);
+        }
+      }
+      return '—';
+    }
+
+    function extractExpiry(data) {
+      if (!Array.isArray(data.events)) return '—';
+      for (const ev of data.events) {
+        if (ev.eventAction === 'expiration' && ev.eventDate) {
+          try { return new Date(ev.eventDate).toISOString().slice(0, 10); }
+          catch { /* fall through */ }
+        }
+      }
+      return '—';
+    }
+
+    function extractEPP(data) {
+      if (!Array.isArray(data.status)) return [];
+      const codes = data.status
+        .filter(item => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(Boolean);
+      return [...new Set(codes)];
+    }
+
+    function extractAbuseEmail(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        // abuse contact is on the registrar entity or a nested abuse entity
+        const checkEntity = (ent) => {
+          if (Array.isArray(ent.roles) && ent.roles.includes('abuse')) {
+            if (Array.isArray(ent.vcardArray?.[1])) {
+              for (const v of ent.vcardArray[1]) {
+                if (v[0] === 'email' && v[3]) return String(v[3]);
+              }
+            }
+          }
+          return null;
+        };
+        let found = checkEntity(e);
+        if (found) return found;
+        // Check nested entities (abuse role is often nested under registrar)
+        if (Array.isArray(e.entities)) {
+          for (const sub of e.entities) {
+            found = checkEntity(sub);
+            if (found) return found;
+          }
+        }
+      }
+      return null;
+    }
+
+    function extractAbusePhone(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        const checkEntity = (ent) => {
+          if (Array.isArray(ent.roles) && ent.roles.includes('abuse')) {
+            if (Array.isArray(ent.vcardArray?.[1])) {
+              for (const v of ent.vcardArray[1]) {
+                if (v[0] === 'tel' && v[3]) return String(v[3]);
+              }
+            }
+          }
+          return null;
+        };
+        let found = checkEntity(e);
+        if (found) return found;
+        if (Array.isArray(e.entities)) {
+          for (const sub of e.entities) { found = checkEntity(sub); if (found) return found; }
+        }
+      }
+      return null;
+    }
+
+    function extractIanaId(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar') && e.handle) {
+          return String(e.handle);
+        }
+      }
+      return null;
+    }
+
+    function extractRegistrarUrl(data) {
+      if (!Array.isArray(data.entities)) return null;
+      for (const e of data.entities) {
+        if (Array.isArray(e.roles) && e.roles.includes('registrar')) {
+          if (Array.isArray(e.links)) {
+            const link = e.links.find(l => l.rel === 'related' || l.rel === 'self');
+            if (link?.href) return link.href;
+          }
+        }
+      }
+      return null;
+    }
+
+    function extractEventDate(data, action) {
+      if (!Array.isArray(data.events)) return null;
+      for (const ev of data.events) {
+        if (ev.eventAction === action && ev.eventDate) {
+          try { return new Date(ev.eventDate).toISOString().slice(0, 10); } catch { /* skip */ }
+        }
+      }
+      return null;
+    }
+
+    function extractNameservers(data) {
+      if (!Array.isArray(data.nameservers)) return null;
+      const ns = data.nameservers
+        .map(n => (n.ldhName || n.unicodeName || '').toLowerCase())
+        .filter(Boolean);
+      return ns.length ? ns : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HOSTING PROVIDER DETECTION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Pattern table: regex tested against NS hostnames → provider label
+    // Ordered most-specific first.
+    const NS_PROVIDER_PATTERNS = [
+      [/\.cloudflare\.com$/,          'Cloudflare'],
+      [/\.awsdns[-\w]*\.(com|net|org|co\.uk)$/, 'Amazon Route 53'],
+      [/\.googledomains\.com$/,        'Google Domains DNS'],
+      [/\.google\.com$/,               'Google Cloud DNS'],
+      [/\.azure[-\w]*\.com$/,          'Azure DNS'],
+      [/\.azure[-\w]*\.net$/,          'Azure DNS'],
+      [/\.nsone\.net$/,                'NS1'],
+      [/\.dynect\.net$/,               'Dyn / Oracle'],
+      [/\.ultradns\.(net|com|org|biz)$/, 'UltraDNS'],
+      [/\.dnsimple\.com$/,             'DNSimple'],
+      [/\.dnsmadeeasy\.com$/,          'DNS Made Easy'],
+      [/\.domaincontrol\.com$/,        'GoDaddy'],
+      [/\.godaddy\.com$/,              'GoDaddy'],
+      [/\.secureserver\.net$/,         'GoDaddy'],
+      [/\.namecheap(hosting)?\.com$/,  'Namecheap'],
+      [/\.registrar-servers\.com$/,    'Namecheap'],
+      [/\.dns-parking\.com$/,          'Namecheap (Parked)'],
+      [/\.name\.com$/,                 'Name.com'],
+      [/\.hover\.com$/,                'Hover'],
+      [/\.porkbun\.com$/,              'Porkbun'],
+      [/\.gandi\.net$/,                'Gandi'],
+      [/\.ovh\.net$/,                  'OVH'],
+      [/\.ovh\.com$/,                  'OVH'],
+      [/\.hetzner\.com$/,              'Hetzner'],
+      [/\.digitalocean\.com$/,         'DigitalOcean'],
+      [/\.linode\.com$/,               'Linode / Akamai'],
+      [/\.vultr\.com$/,                'Vultr'],
+      [/\.netlify\.com$/,              'Netlify'],
+      [/\.vercel-dns\.com$/,           'Vercel'],
+      [/\.squarespace\.com$/,          'Squarespace'],
+      [/\.wixdns\.net$/,               'Wix'],
+      [/\.shopify\.com$/,              'Shopify'],
+      [/\.webflow\.com$/,              'Webflow'],
+      [/\.wordpress\.com$/,            'WordPress.com'],
+      [/\.bluehost\.com$/,             'Bluehost'],
+      [/\.hostgator\.com$/,            'HostGator'],
+      [/\.siteground\.net$/,           'SiteGround'],
+      [/\.dreamhost\.com$/,            'DreamHost'],
+      [/\.pair\.com$/,                 'pair Networks'],
+      [/\.ionos\.com$/,                'IONOS'],
+      [/\.1and1\.com$/,                'IONOS'],
+      [/\.strato\.de$/,                'Strato'],
+      [/\.rackspace\.com$/,            'Rackspace'],
+      [/\.bunny\.net$/,                'Bunny DNS'],
+      [/\.cdn77\.org$/,                'CDN77'],
+      [/\.fastly\.net$/,               'Fastly'],
+      [/\.akamai(tech)?\.net$/,        'Akamai'],
+    ];
+
+    function matchNSProvider(nsHostname) {
+      for (const [pattern, label] of NS_PROVIDER_PATTERNS) {
+        if (pattern.test(nsHostname)) return label;
+      }
+      return null;
+    }
+
+    // In-memory cache for IP→org lookups
+    const _ipOrgCache = new Map();
+
+    async function resolveNSNames(domain) {
+      try {
+        const res = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
+          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(6000) }
+        );
+        if (!res.ok) return [];
+        const json = await res.json();
+        return (json.Answer || [])
+          .filter(r => r.type === 2)
+          .map(r => r.data.replace(/\.$/, '').toLowerCase());
+      } catch { return []; }
+    }
+
+    async function resolveARecord(hostname) {
+      try {
+        const res = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+          { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
+        );
+        if (!res.ok) return null;
+        const json = await res.json();
+        return (json.Answer || []).find(r => r.type === 1)?.data || null;
+      } catch { return null; }
+    }
+
+    async function ipToOrg(ip) {
+      // 1. Return cached result if we've seen this IP this session
+      if (_ipOrgCache.has(ip)) return _ipOrgCache.get(ip);
+      
+      let result = null;
+
+      // ─────────────────────────────────────────────────────────────────
+      // ATTEMPT 1: ipwho.is (Generous 10k/day limit, HTTPS, free)
+      // ─────────────────────────────────────────────────────────────────
+      try {
+        const res1 = await fetch(`https://ipwho.is/${ip}`, { signal: makeSignal(5000) });
+        if (res1.ok) {
+          const json1 = await res1.json();
+          if (json1.success && json1.connection) {
+            result = {
+              org:   json1.connection.org || json1.connection.isp || null,
+              asn:   json1.connection.asn ? `AS${json1.connection.asn}` : null,
+              abuse: null
+            };
+          }
+        }
+      } catch (e) {
+        // Network error or timeout — proceed to fallback
+      }
+
+      // ─────────────────────────────────────────────────────────────────
+      // ATTEMPT 2: ipinfo.io (Strict 1k/day limit, requires data splitting)
+      // ─────────────────────────────────────────────────────────────────
+      if (!result) {
+        try {
+          const res2 = await fetch(`https://ipinfo.io/${ip}/json`, { 
+            headers: { 'Accept': 'application/json' },
+            signal: makeSignal(5000) 
+          });
+          
+          if (res2.ok) {
+            const json2 = await res2.json();
+            if (json2.org) {
+              // ipinfo formats orgs as: "AS13335 Cloudflare, Inc."
+              // We need to split the ASN from the Organization name
+              const orgMatch = json2.org.match(/^AS(\d+)\s+(.+)$/);
+              if (orgMatch) {
+                result = { org: orgMatch[2], asn: `AS${orgMatch[1]}`, abuse: null };
+              } else {
+                result = { org: json2.org, asn: null, abuse: null };
+              }
+            }
+          }
+        } catch (e) {
+          // Fallback also failed
         }
       }
 
-      // Cache the result
-      setCachedResult(domain, result);
+      // Cache the result (even if it's null, to prevent hammering failing 
+      // APIs on the exact same dead IP repeatedly during a large batch)
+      _ipOrgCache.set(ip, result);
       return result;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // FILE HANDLING
-    // ─────────────────────────────────────────────────────────────────────────
-
-    function handleFileInput(e) {
-      const file = e.target.files[0];
-      if (file) processFile(file);
-    }
-
-    function processFile(file) {
-      if (!file.name.match(/\.(txt|csv)$/i)) {
-        showToast('⚠ Please upload a .txt or .csv file');
-        return;
+    async function detectHostingProvider(domain) {
+      // Pass 1: Check the root domain's A record
+      let ip = await resolveARecord(domain);
+      
+      // Pass 2: If the root has no A record (or fails), try the www subdomain
+      if (!ip) {
+        ip = await resolveARecord(`www.${domain}`);
       }
 
-      const reader = new FileReader();
-      reader.onload = e => {
-        const content = e.target.result;
-        const domains = parseDomainsFromFile(content);
+      // Pass 3: Ask our APIs for the organization owning that IP
+      if (ip) {
+        const info = await ipToOrg(ip);
         
-        if (domains.length === 0) {
-          showToast('⚠ No valid domains found in file');
-          return;
-        }
-
-        $('domainInput').value = domains.join('\n');
-        const zone = $('dropZone');
-        zone.classList.add('loaded');
-        zone.querySelector('.drop-text').innerHTML = `<strong>✓ Loaded ${domains.length} domain${domains.length > 1 ? 's' : ''}</strong>`;
-        zone.querySelector('.drop-hint').textContent = `From ${file.name}`;
-        showToast(`✓ Loaded ${domains.length} domain${domains.length > 1 ? 's' : ''}`);
-      };
-      reader.readAsText(file);
-    }
-
-    function parseDomainsFromFile(content) {
-      const lines = content.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-      const domains = [];
-
-      for (const line of lines) {
-        // Try as comma-separated first (CSV)
-        if (line.includes(',')) {
-          const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-          for (const col of cols) {
-            const d = normalizeDomain(col);
-            if (d && !domains.includes(d)) domains.push(d);
-          }
-        } else {
-          // Try as plain domain
-          const d = normalizeDomain(line);
-          if (d && !domains.includes(d)) domains.push(d);
+        if (info?.org) {
+           // Append a note if it's Cloudflare
+           if (info.org.includes('Cloudflare')) {
+             info.org = 'Cloudflare (Proxy/CDN)';
+           }
+           return info;
         }
       }
 
-      return domains;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // TABLE RENDERING
-    // ─────────────────────────────────────────────────────────────────────────
-
-    function renderTable() {
-      if (!results.length) return;
-
-      // Apply filters
-      const filtered = results.map((r, idx) => {
-        let show = true;
-        
-        // Status filter
-        if (currentStatusFilter !== 'all') {
-          show = show && r.status === currentStatusFilter;
+      // Pass 4: Fallback to NS pattern matching (for parked domains or if A record lookup failed)
+      const nsNames = await resolveNSNames(domain);
+      if (nsNames.length) {
+        for (const ns of nsNames) {
+          const label = matchNSProvider(ns);
+          if (label) return { org: label, asn: null, abuse: null };
         }
-        
-        // EPP filter
-        if (currentEPPFilter) {
-          show = show && r.eppCodes && r.eppCodes.includes(currentEPPFilter);
-        }
-        
-        return { ...r, show, idx };
-      });
+      }
 
-      const html = `
-        <div class="table-header">
-          <div class="table-title">${results.length} domain${results.length > 1 ? 's' : ''} checked</div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Status</th>
-                <th>EPP Flags</th>
-                <th>Registrar</th>
-                <th>Expiry</th>
-                <th>Hosting</th>
-                <th>Source</th>
-                <th>Cache</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filtered.map(r => `
-                <tr class="${r.show ? '' : 'filtered-out'}" data-idx="${r.idx}">
-                  <td class="cell-domain" title="${escAttr(r.domain)}">${escHtml(r.domain)}</td>
-                  <td>${renderStatusBadge(r.status)}</td>
-                  <td class="cell-epp">${renderEPPCodes(r.eppCodes)}</td>
-                  <td>${escHtml(r.registrar)}</td>
-                  <td>${escHtml(r.expiry)}</td>
-                  <td>${escHtml(r.hostingProvider)}</td>
-                  <td>${escHtml(r.source)}</td>
-                  <td class="cell-cache">${r.fromCache ? '<span class="cache-badge">Cached</span>' : ''}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-
-      $('tableContainer').innerHTML = html;
-    }
-
-    function renderStatusBadge(status) {
-      const classMap = {
-        available: 'status-available',
-        registered: 'status-registered',
-        error: 'status-error',
-        pending: 'status-pending',
-        checking: 'status-checking'
-      };
-      const textMap = {
-        available: 'Available',
-        registered: 'Registered',
-        error: 'Error',
-        pending: 'Pending',
-        checking: 'Checking…'
-      };
-      const cls = classMap[status] || 'status-pending';
-      const txt = textMap[status] || status;
-      const spinner = status === 'checking' ? '<span class="spinner" style="width:10px;height:10px;border-width:1.5px;"></span>' : '';
-      return `<span class="status-badge ${cls}">${spinner}${escHtml(txt)}</span>`;
-    }
-
-    function renderEPPCodes(codes) {
-      if (!codes || !codes.length) return '—';
-      return codes.map(c => `<span class="epp-code">${escHtml(c)}</span>`).join('');
+      return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // STATS
+    // EPP KNOWLEDGE BASE
     // ─────────────────────────────────────────────────────────────────────────
+    const EPP_META = {
+      'clientHold':               { label: 'clientHold',           tier: 'critical', tip: 'Registrar suspended this domain. DNS is NOT resolving.' },
+      'serverHold':               { label: 'serverHold',           tier: 'critical', tip: 'Registry suspended this domain. DNS is NOT resolving.' },
+      'pendingDelete':            { label: 'pendingDelete',         tier: 'critical', tip: 'Domain is queued for deletion. May be redeemable or about to drop.' },
+      'redemptionPeriod':         { label: 'redemption',           tier: 'critical', tip: 'Expired and in the 30-day redemption period. Restorable at extra cost.' },
+      'pendingRestore':           { label: 'pendingRestore',        tier: 'warn',     tip: 'Registrant requested redemption; process not yet complete.' },
+      'pendingCreate':            { label: 'pendingCreate',         tier: 'warn',     tip: 'Domain creation is in progress.' },
+      'pendingRenew':             { label: 'pendingRenew',          tier: 'warn',     tip: 'A renewal request is being processed.' },
+      'pendingTransfer':          { label: 'pendingTransfer',       tier: 'warn',     tip: 'A transfer to another registrar is in progress.' },
+      'pendingUpdate':            { label: 'pendingUpdate',         tier: 'warn',     tip: 'A domain update is pending registry processing.' },
+      'clientRenewProhibited':    { label: 'renewLock (client)',    tier: 'warn',     tip: 'Registrar blocked renewal. Domain may be at risk of expiry.' },
+      'serverRenewProhibited':    { label: 'renewLock (server)',    tier: 'warn',     tip: 'Registry blocked renewal.' },
+      'autoRenewPeriod':          { label: 'autoRenew',            tier: 'warn',     tip: 'Auto-renewed; within the post-renewal grace period.' },
+      'clientTransferProhibited': { label: 'xferLock (client)',     tier: 'neutral',  tip: 'Registrar transfer lock. Cannot be transferred away.' },
+      'serverTransferProhibited': { label: 'xferLock (server)',     tier: 'neutral',  tip: 'Registry transfer lock. Common on newly registered domains (60-day ICANN lock).' },
+      'addPeriod':                { label: 'addPeriod',             tier: 'neutral',  tip: 'Within the initial grace period after registration.' },
+      'renewPeriod':              { label: 'renewPeriod',           tier: 'neutral',  tip: 'Within the grace period after a manual renewal.' },
+      'transferPeriod':           { label: 'transferPeriod',        tier: 'neutral',  tip: 'Within the grace period after a registrar transfer.' },
+      'clientDeleteProhibited':   { label: 'deleteLock (client)',   tier: 'ok',       tip: 'Registrar delete lock. Protects from accidental deletion.' },
+      'serverDeleteProhibited':   { label: 'deleteLock (server)',   tier: 'ok',       tip: 'Registry delete lock. Strong protection against deletion.' },
+      'clientUpdateProhibited':   { label: 'updateLock (client)',   tier: 'ok',       tip: 'Registrar update lock. Domain details cannot be modified.' },
+      'serverUpdateProhibited':   { label: 'updateLock (server)',   tier: 'ok',       tip: 'Registry update lock. Domain details cannot be modified.' },
+      'ok':                       { label: 'ok',                    tier: 'ok',       tip: 'Domain is active with no restrictions.' },
+      'active':                   { label: 'active',                tier: 'ok',       tip: 'Domain is active.' },
+      'linked':                   { label: 'linked',                tier: 'ok',       tip: 'Domain has associated nameserver objects.' },
+    };
+
+    function getEPPMeta(code) {
+      return EPP_META[code.toLowerCase().trim()] || { label: code, tier: 'neutral', tip: null };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RENDERING  — batched DOM writes, stats in single pass
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Null-safe DOM helper — throws a clear error if an expected element is missing
+    // rather than silently propagating null through the codebase.
+    function $(id) {
+      const el = document.getElementById(id);
+      if (!el && typeof id === 'string') console.warn(`[BulkWHOIS] Element #${id} not found`);
+      return el;
+    }
 
     function updateStats() {
-      const stats = {
-        total: results.length,
-        available: results.filter(r => r.status === 'available').length,
-        registered: results.filter(r => r.status === 'registered').length,
-        errors: results.filter(r => r.status === 'error').length,
-      };
+      // Single pass — O(n) not O(3n)
+      let reg = 0, avail = 0, err = 0;
+      for (const r of results) {
+        if (r.status === 'registered') reg++;
+        else if (r.status === 'available') avail++;
+        else if (r.status === 'error') err++;
+      }
+      $('statTotal').textContent = results.length;
+      $('statReg').textContent   = reg;
+      $('statAvail').textContent = avail;
+      $('statErr').textContent   = err;
+    }
 
-      const statsRow = $('statsRow');
-      if (stats.total === 0) {
-        statsRow.style.display = 'none';
+    function updateProgress({ done, total, current, batch, totalBatches }) {
+      const pct = total ? Math.round(done / total * 100) : 0;
+      $('progressBar').style.width   = `${pct}%`;
+      $('progressBar').parentElement.setAttribute('aria-valuenow', pct);
+      $('progressCount').textContent = `${done} / ${total}`;
+      $('progressLabel').textContent = current ? `Checking ${current}…` : 'Checking…';
+      $('progressBatch').textContent = totalBatches > 1 ? `Batch ${batch}/${totalBatches}` : '';
+    }
+
+    function renderTable() {
+      if (results.length === 0) {
+        $('tableContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <p>Enter domains above and click <strong>Check Domains</strong></p>
+          </div>`;
         return;
       }
 
-      statsRow.style.display = 'grid';
-      statsRow.innerHTML = `
-        <div class="stat-card">
-          <div class="stat-value">${stats.total}</div>
-          <div class="stat-label">Total</div>
-        </div>
-        <div class="stat-card available">
-          <div class="stat-value">${stats.available}</div>
-          <div class="stat-label">Available</div>
-        </div>
-        <div class="stat-card registered">
-          <div class="stat-value">${stats.registered}</div>
-          <div class="stat-label">Registered</div>
-        </div>
-        <div class="stat-card errors">
-          <div class="stat-value">${stats.errors}</div>
-          <div class="stat-label">Errors</div>
-        </div>
-      `;
+      const eppFilterLower = currentEPPFilter ? currentEPPFilter.toLowerCase() : null;
+      // Build the filter set once outside the loop — not once per row
+      const eppFilterSet = eppFilterLower ? new Set([eppFilterLower]) : null;
+      const parts = [];
+
+      for (const r of results) {
+        // Status filter
+        if (currentStatusFilter !== 'all' && r.status !== currentStatusFilter) continue;
+        // EPP filter — O(1) Set lookup; build row's EPP set only when filter is active
+        if (eppFilterSet) {
+          const rowEPP = new Set((r.eppCodes || []).map(c => c.toLowerCase()));
+          if (!rowEPP.has(eppFilterLower)) continue;
+        }
+
+        const safeDomain = escHtml(r.domain);
+        const domainCell = r.status === 'registered'
+          ? `<a href="https://who.is/whois/${safeDomain}" target="_blank" rel="noopener noreferrer">${safeDomain}</a>`
+          : safeDomain;
+
+        // Whitelist source values to prevent CSS class injection
+        const SAFE_SOURCES = new Set(['RDAP', 'WHOIS']);
+        const sourceTag = r.source && r.source !== 'RDAP' && SAFE_SOURCES.has(r.source)
+          ? `<span class="source-badge source-${r.source.toLowerCase()}" title="Data via ${escHtml(r.source)}">${escHtml(r.source)}</span>`
+          : '';
+
+        const cacheTag = r.fromCache
+          ? `<span class="cache-badge" title="Loaded from local cache (24 h TTL)">cached</span>`
+          : '';
+
+        const rowIdx = parts.length;
+        parts.push(`<tr class="data-row" data-idx="${rowIdx}">
+          <td class="domain-cell">
+            <div class="domain-cell-inner">
+              <span class="scroll-cell"><span class="scroll-inner">${domainCell}</span></span>
+              ${sourceTag}${cacheTag}
+            </div>
+          </td>
+          <td>${statusBadge(r.status)}</td>
+          <td>${renderEPPTags(r.eppCodes)}</td>
+          <td class="registrar-cell scroll-cell"><span class="scroll-inner">${escHtml(r.registrar)}</span></td>
+          <td class="expiry-cell">${expiryCell(r.expiry)}</td>
+          <td class="host-cell scroll-cell">${renderHostingCell(r)}</td>
+          <td class="chevron-cell"><span class="row-chevron" aria-label="Expand details">›</span></td>
+        </tr>
+        <tr class="detail-row" id="detail-row-${rowIdx}">
+          <td colspan="7">${renderDetailPanel(r)}</td>
+        </tr>`);
+      }
+
+      const tbody = parts.length
+        ? parts.join('')
+        : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
+
+      // Single innerHTML write per render cycle
+      $('tableContainer').innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th><th>Hosting</th><th style="width:32px"></th>
+            </tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>`;
+
+      // Cancel any previously queued frame before requesting a new one
+      if (renderRafId) cancelAnimationFrame(renderRafId);
+
+      // Measure overflow after DOM is updated so scroll distances are accurate
+      renderRafId = requestAnimationFrame(() => { 
+        applyScrollDistances(); 
+        wireDetailRows(); 
+      });
+    }
+
+    function renderEPPTags(codes) {
+      if (!codes?.length) return '<span style="color:var(--muted);font-size:12px">—</span>';
+      return `<div class="epp-wrap">${codes.map(code => {
+        const m = getEPPMeta(code);
+        const tip = m.tip ? ` data-tip="${escAttr(m.tip)}"` : '';
+        return `<span class="epp-tag epp-${m.tier}"${tip}>${escHtml(m.label)}</span>`;
+      }).join('')}</div>`;
+    }
+
+    function statusBadge(status) {
+      const map = {
+        registered: `<span class="status-badge status-registered"><span class="dot dot-red"></span>Registered</span>`,
+        available:  `<span class="status-badge status-available"><span class="dot dot-green"></span>Available</span>`,
+        error:      `<span class="status-badge status-error"><span class="dot dot-yellow"></span>Error</span>`,
+        pending:    `<span class="status-badge status-pending"><span class="spinner"></span>Checking…</span>`,
+      };
+      return map[status] || escHtml(status);
+    }
+
+    function expiryCell(expiry) {
+      if (!expiry || expiry === '—') return '<span style="color:var(--muted)">—</span>';
+      try {
+        const daysLeft = Math.floor((new Date(expiry) - Date.now()) / 86400000);
+        return daysLeft < 60
+          ? `<span class="expiry-soon">${expiry} ⚠</span>`
+          : `<span class="expiry-old">${expiry}</span>`;
+      } catch { return escHtml(expiry); }
+    }
+
+    function renderHostingCell(r) {
+      if (r.status === 'pending') {
+        return `<span class="scroll-inner" style="color:var(--muted);font-size:12px">…</span>`;
+      }
+      if (r.status !== 'registered' || !r.hostingProvider) {
+        return `<span class="scroll-inner" style="color:var(--muted);font-size:11px">—</span>`;
+      }
+      return `<span class="scroll-inner">${escHtml(r.hostingProvider)}</span>`;
+    }
+
+    function applyScrollDistances() {
+      document.querySelectorAll('.scroll-cell').forEach(cell => {
+        const inner = cell.querySelector('.scroll-inner');
+        if (!inner) return;
+
+        // Reset any previous animation state
+        inner.style.transition = 'none';
+        inner.style.transform  = 'translateX(0)';
+        cell.classList.remove('overflows', 'scrolled', 'scrolling');
+
+        // Must read layout after reset — use rAF to let browser flush
+        requestAnimationFrame(() => {
+          // Use offsetWidth minus horizontal padding to get the true content width
+          // This prevents left-side clipping when the cell IS the td element
+          const style   = getComputedStyle(cell);
+          const padL    = parseFloat(style.paddingLeft)  || 0;
+          const padR    = parseFloat(style.paddingRight) || 0;
+          const cellW   = cell.clientWidth - padL - padR;
+          const innerW  = inner.scrollWidth;
+          const overflow = innerW - cellW;
+
+          if (overflow <= 2) return; // fits, nothing to do
+
+          cell.classList.add('overflows');
+          // Overshoot by 8px so the rightmost character is fully visible (not faded)
+          const dist = overflow + 8;
+
+          // Animate on hover using JS timers for full control
+          let animTimer = null;
+
+          cell.addEventListener('mouseenter', () => {
+            clearTimeout(animTimer);
+            cell.classList.remove('scrolled');
+            // Small delay before starting so fast mouse-overs don't flicker
+            animTimer = setTimeout(() => {
+              cell.classList.add('scrolling');
+              inner.style.transition = `transform ${Math.max(1.2, dist / 60)}s ease-in-out`;
+              inner.style.transform  = `translateX(-${dist}px)`;
+              // Mark as scrolled when animation ends so right fade hides
+              const dur = Math.max(1.2, dist / 60) * 1000;
+              animTimer = setTimeout(() => cell.classList.add('scrolled'), dur);
+            }, 300);
+          });
+
+          cell.addEventListener('mouseleave', () => {
+            clearTimeout(animTimer);
+            cell.classList.remove('scrolled', 'scrolling');
+            inner.style.transition = 'transform .4s ease';
+            inner.style.transform  = 'translateX(0)';
+          });
+        });
+      });
+    }
+
+    function renderDetailPanel(r) {
+      // Helper: plain text field
+      const field = (label, val) => (val && val !== '—')
+        ? `<div class="detail-field"><span class="detail-label">${label}</span><span class="detail-val">${escHtml(val)}</span></div>`
+        : '';
+
+      // Helper: field with a clickable link value
+      const fieldLink = (label, val, href) => (val && val !== '—')
+        ? `<div class="detail-field"><span class="detail-label">${label}</span><span class="detail-val"><a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">${escHtml(val)}</a></span></div>`
+        : '';
+
+      // Helper: mailto field
+      const fieldMail = (label, val) => (val && val !== '—')
+        ? `<div class="detail-field"><span class="detail-label">${label}</span><span class="detail-val"><a href="mailto:${escHtml(val)}">${escHtml(val)}</a></span></div>`
+        : '';
+
+      // Helper: muted "not available" line so sections are never empty
+      const na = (msg) => `<div class="detail-field"><span class="detail-val detail-val-muted">${msg}</span></div>`;
+
+      // ── Domain section — always rendered ──────────────────────────────────
+      let domainFields = '';
+      if (r.status === 'registered') {
+        domainFields += field('Created', r.created);
+        domainFields += field('Last Updated', r.updated);
+        domainFields += field('Expiry', r.expiry && r.expiry !== '—' ? r.expiry : null);
+        // EPP codes with tier labels
+        if (r.eppCodes && r.eppCodes.length) {
+          const eppList = r.eppCodes.map(c => {
+            const m = getEPPMeta(c);
+            return escHtml(m.label);
+          }).join(', ');
+          domainFields += `<div class="detail-field"><span class="detail-label">EPP Status</span><span class="detail-val">${eppList}</span></div>`;
+        }
+        // Full WHOIS lookup link
+        domainFields += fieldLink('Full WHOIS', 'who.is lookup →', `https://who.is/whois/${escHtml(r.domain)}`);
+        // RDAP source link
+        domainFields += fieldLink('RDAP Record', 'rdap.org →', `https://rdap.org/domain/${escHtml(r.domain)}`);
+      } else if (r.status === 'available') {
+        domainFields += `<div class="detail-field"><span class="detail-val detail-val-available">✓ This domain appears to be available for registration.</span></div>`;
+        // Registration suggestions
+        domainFields += fieldLink('Register on Namecheap', 'namecheap.com →', `https://www.namecheap.com/domains/registration/results/?domain=${escHtml(r.domain)}`);
+        domainFields += fieldLink('Register on Porkbun', 'porkbun.com →', `https://porkbun.com/checkout/search?q=${escHtml(r.domain)}`);
+      } else if (r.status === 'error') {
+        domainFields += `<div class="detail-field"><span class="detail-val detail-val-muted">⚠ Lookup failed: ${escHtml(r.registrar || 'unknown error')}</span></div>`;
+        domainFields += fieldLink('Try manual WHOIS', 'who.is →', `https://who.is/whois/${escHtml(r.domain)}`);
+        domainFields += fieldLink('Try RDAP.org', 'rdap.org →', `https://rdap.org/domain/${escHtml(r.domain)}`);
+      } else {
+        domainFields += na('Status pending…');
+      }
+
+      const domainSection = `
+        <div class="detail-section">
+          <div class="detail-section-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+            Domain
+          </div>
+          ${domainFields || na('No domain data available.')}
+        </div>`;
+
+      // ── Registrar section ─────────────────────────────────────────────────
+      let registrarSection = '';
+      if (r.status === 'registered') {
+        let regFields = '';
+        regFields += field('Name', r.registrar !== '—' ? r.registrar : null);
+        regFields += field('IANA ID', r.ianaId);
+        if (r.registrarUrl) {
+          const displayUrl = r.registrarUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+          regFields += fieldLink('Website', displayUrl, r.registrarUrl);
+        }
+        regFields += fieldMail('Abuse Email', r.abuseEmail);
+        regFields += field('Abuse Phone', r.abusePhone);
+        // Link to ICANN registrar lookup
+        if (r.ianaId) {
+          regFields += fieldLink('ICANN Lookup', 'lookup.icann.org →', `https://lookup.icann.org/en/lookup?name=${escHtml(r.domain)}`);
+        }
+
+        registrarSection = `
+          <div class="detail-section">
+            <div class="detail-section-title">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              Registrar
+            </div>
+            ${regFields || na('No registrar data returned by RDAP.')}
+          </div>`;
+      }
+
+      // ── Hosting / NS section ──────────────────────────────────────────────
+      let hostSection = '';
+      if (r.status === 'registered') {
+        let hostFields = '';
+        if (r.hostingProvider) {
+          hostFields += field('Provider', r.hostingProvider);
+          hostFields += fieldMail('Abuse Contact', r.hostAbuse);
+          hostFields += field('ASN', r.hostAsn);
+        }
+        // Nameservers — one per line
+        if (r.nameservers && r.nameservers.length) {
+          const nsList = r.nameservers.map(ns =>
+            `<span class="detail-ns">${escHtml(ns)}</span>`
+          ).join('');
+          hostFields += `<div class="detail-field"><span class="detail-label">Nameservers</span><span class="detail-val detail-ns-list">${nsList}</span></div>`;
+        }
+        if (!r.hostingProvider && !r.nameservers) {
+          hostFields += na('Hosting provider could not be detected.');
+        }
+
+        hostSection = `
+          <div class="detail-section">
+            <div class="detail-section-title">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Hosting / Nameservers
+            </div>
+            ${hostFields || na('No hosting data available.')}
+          </div>`;
+      }
+
+      // WRAPPER ADDED HERE FOR CSS ANIMATION
+      return `
+        <div class="detail-panel-wrapper">
+          <div class="detail-panel">
+            ${domainSection}${registrarSection}${hostSection}
+          </div>
+        </div>`;
+    }
+
+    function wireDetailRows() {
+      $('tableContainer').querySelectorAll('.data-row').forEach(row => {
+        row.addEventListener('click', e => {
+          if (e.target.closest('a')) return;
+
+          const idx     = row.dataset.idx;
+          const detail  = document.getElementById('detail-row-' + idx);
+          const chevron = row.querySelector('.row-chevron');
+          if (!detail) return;
+
+          const wrapper = detail.querySelector('.detail-panel-wrapper');
+          const isOpen  = row.classList.contains('row-expanded');
+
+          if (isOpen) {
+            // Initiate closing animation
+            wrapper.classList.remove('is-open');
+            row.classList.remove('row-expanded');
+            if (chevron) chevron.classList.remove('chevron-open');
+            
+            // Wait for the CSS transition to finish before hiding the row entirely
+            setTimeout(() => {
+              // Ensure it hasn't been reopened during the timeout
+              if (!row.classList.contains('row-expanded')) {
+                detail.style.display = 'none';
+              }
+            }, 300); // Matches the 0.3s CSS transition
+          } else {
+            // Initiate opening animation
+            detail.style.display = 'table-row';
+            void detail.offsetWidth; // Force a DOM reflow so the browser registers the display change
+            
+            wrapper.classList.add('is-open');
+            row.classList.add('row-expanded');
+            if (chevron) chevron.classList.add('chevron-open');
+          }
+        });
+      });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // FILTERS
     // ─────────────────────────────────────────────────────────────────────────
 
-    function updateStatusFilterBar() {
-      const counts = {
-        all: results.length,
-        available: results.filter(r => r.status === 'available').length,
-        registered: results.filter(r => r.status === 'registered').length,
-        error: results.filter(r => r.status === 'error').length,
-      };
-
-      const filterSection = $('filterSection');
-      if (results.length === 0) {
-        filterSection.style.display = 'none';
-        return;
-      }
-
-      filterSection.style.display = 'block';
-      const bar = $('statusFilterBar');
-      bar.innerHTML = Object.entries(counts)
-        .filter(([_, count]) => count > 0)
-        .map(([status, count]) => {
-          const active = currentStatusFilter === status ? 'active' : '';
-          const label = status.charAt(0).toUpperCase() + status.slice(1);
-          return `<button class="filter-btn ${active}" data-filter="${status}">${label} <span class="count">${count}</span></button>`;
-        })
-        .join('');
-    }
-
-    function setStatusFilter(filter, btn) {
-      currentStatusFilter = filter;
-      
-      // Update button states
-      document.querySelectorAll('#statusFilterBar .filter-btn').forEach(b => {
-        b.classList.toggle('active', b === btn);
-      });
-      
+    function setStatusFilter(f, btn) {
+      currentStatusFilter = f;
+      document.querySelectorAll('#statusFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+      btn?.classList.add('active');
       renderTable();
     }
 
+    function setEPPFilter(code, btn) {
+      if (currentEPPFilter === code) {
+        currentEPPFilter = null;
+        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+      } else {
+        currentEPPFilter = code;
+        document.querySelectorAll('#eppFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+        btn?.classList.add('active');
+      }
+      renderTable();
+    }
+
+    let _eppBarListenerController = null;
+
     function updateEPPFilterBar() {
-      const eppCodes = new Set();
-      results.forEach(r => {
-        if (r.eppCodes && r.eppCodes.length) {
-          r.eppCodes.forEach(code => eppCodes.add(code));
+      const seen = new Map();
+      for (const r of results) {
+        for (const code of (r.eppCodes || [])) {
+          if (!seen.has(code)) seen.set(code, getEPPMeta(code));
         }
+      }
+
+      if (!seen.size) { $('eppFilterGroup').style.display = 'none'; return; }
+
+      const tierOrder = { critical: 0, warn: 1, ok: 2, neutral: 3 };
+      const sorted = [...seen.entries()].sort((a, b) => {
+        const td = tierOrder[a[1].tier] - tierOrder[b[1].tier];
+        return td || a[0].localeCompare(b[0]);
       });
 
-      const group = $('eppFilterGroup');
-      if (eppCodes.size === 0) {
-        group.style.display = 'none';
-        return;
+      const counts = {};
+      for (const r of results) {
+        for (const code of (r.eppCodes || [])) counts[code] = (counts[code] || 0) + 1;
       }
 
-      // Tear down old listener
-      if (_eppBarListenerController) {
-        _eppBarListenerController.abort();
-        _eppBarListenerController = null;
-      }
+      $('eppFilterBar').innerHTML = sorted.map(([code, meta]) =>
+        `<button class="filter-btn epp-f-${meta.tier}" data-epp-code="${escAttr(code)}">${escHtml(meta.label)} <span style="opacity:.6">(${counts[code] || 0})</span></button>`
+      ).join('');
 
-      group.style.display = 'block';
-      const bar = $('eppFilterBar');
-      
-      const sortedCodes = Array.from(eppCodes).sort();
-      bar.innerHTML = `
-        <button class="filter-btn ${!currentEPPFilter ? 'active' : ''}" data-epp="">All</button>
-        ${sortedCodes.map(code => {
-          const count = results.filter(r => r.eppCodes && r.eppCodes.includes(code)).length;
-          const active = currentEPPFilter === code ? 'active' : '';
-          return `<button class="filter-btn ${active}" data-epp="${escAttr(code)}">${escHtml(code)} <span class="count">${count}</span></button>`;
-        }).join('')}
-      `;
-
-      // Set up new listener with AbortController
+      // Remove any previous listener before attaching a new one
+      if (_eppBarListenerController) _eppBarListenerController.abort();
       _eppBarListenerController = new AbortController();
-      bar.addEventListener('click', e => {
-        const btn = e.target.closest('[data-epp]');
-        if (!btn) return;
-        
-        currentEPPFilter = btn.dataset.epp || null;
-        
-        bar.querySelectorAll('.filter-btn').forEach(b => {
-          b.classList.toggle('active', b === btn);
-        });
-        
-        renderTable();
+      $('eppFilterBar').addEventListener('click', e => {
+        const btn = e.target.closest('[data-epp-code]');
+        if (btn) setEPPFilter(btn.dataset.eppCode, btn);
       }, { signal: _eppBarListenerController.signal });
+
+      $('eppFilterGroup').style.display = 'flex';
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // MAIN CHECK FLOW
+    // FILE IMPORT
     // ─────────────────────────────────────────────────────────────────────────
 
-    function updateProgress({ done, total, current, batch, totalBatches }) {
-      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      $('progressBar').style.width = `${pct}%`;
-      $('progressBar').parentElement.setAttribute('aria-valuenow', pct);
-      
-      const label = current 
-        ? `Checking ${current} — ${done}/${total} (${pct}%)`
-        : `${done}/${total} (${pct}%)`;
-      $('progressLabel').textContent = label;
-      
-      if (totalBatches > 1) {
-        $('progressBatch').textContent = `Batch ${batch}/${totalBatches}`;
+    function handleFileInput(e) {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+      e.target.value = ''; // reset so same file can be re-selected
+    }
+
+    function processFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['txt', 'csv'].includes(ext)) { showToast('⚠ Only .txt and .csv files are supported'); return; }
+      if (file.size > 500_000) { showToast('⚠ File too large (max 500 KB)'); return; }
+
+      const reader = new FileReader();
+      reader.onerror = () => showToast('⚠ Could not read file');
+      reader.onload = e => {
+        const text = e.target.result;
+        const raw  = ext === 'csv' ? extractCSVDomains(text) : text;
+        const { valid, skipped } = parseAndValidateDomains(raw);
+
+        if (!valid.length) { showToast('⚠ No valid domains found in file'); return; }
+
+        const ta = $('domainInput');
+        const existing = ta.value.trim();
+        ta.value = existing ? `${existing}\n${valid.join('\n')}` : valid.join('\n');
+
+        const zone = $('dropZone');
+        zone.classList.add('loaded');
+        zone.querySelector('.drop-text').innerHTML =
+          `<strong>${escHtml(file.name)}</strong> — ${valid.length} domain${valid.length > 1 ? 's' : ''} loaded` +
+          (skipped.length ? ` <span style="color:var(--yellow)">(${skipped.length} skipped)</span>` : '');
+        zone.querySelector('.drop-hint').textContent = 'Click or drop another file to add more';
+
+        showToast(`✓ ${valid.length} imported${skipped.length ? `, ${skipped.length} skipped` : ''}`);
+      };
+      reader.readAsText(file);
+    }
+
+    /** Extract text from CSV — detects which column holds domains */
+    function extractCSVDomains(text) {
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (!lines.length) return '';
+      const rows = lines.map(splitCSVLine);
+      const numCols = rows.reduce((max, r) => Math.max(max, r.length), 0);
+      let bestCol = 0, bestScore = 0;
+      for (let c = 0; c < numCols; c++) {
+        const score = rows.slice(0, 10).filter(r => r[c] && looksLikeDomain(r[c])).length;
+        if (score > bestScore) { bestScore = score; bestCol = c; }
       }
+      return rows.map(r => (r[bestCol] || '').trim()).join('\n');
     }
+
+    function splitCSVLine(line) {
+      const result = [];
+      let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; continue; }
+        if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
+        cur += ch;
+      }
+      result.push(cur.trim());
+      return result;
+    }
+
+    function looksLikeDomain(s) {
+      // Loose check for CSV column detection only — not a validator.
+      // Allows subdomains (a.b.c.io), rejects trailing hyphens, requires valid TLD.
+      return /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(s.trim());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MAIN RUN  — batched queue with cancel support
+    // ─────────────────────────────────────────────────────────────────────────
+
+    let _cancelRequested = false;
 
     function cancelRun() {
+      if (!running) return;
       _cancelRequested = true;
+      $('cancelBtn').textContent = 'Cancelling…';
       $('cancelBtn').disabled = true;
-      showToast('Cancelling…');
     }
 
     async function runCheck() {
       if (running) return;
+      const rawText = $('domainInput').value;
+      if (!rawText.trim()) return showToast('⚠ Paste at least one domain first');
 
-      const input = $('domainInput').value.trim();
-      if (!input) {
-        showToast('⚠ Please enter at least one domain');
+      const { valid, skipped } = parseAndValidateDomains(rawText);
+
+      if (!valid.length) {
+        showToast(skipped.length
+          ? `⚠ No valid domains — ${skipped[0].reason}`
+          : '⚠ No valid domains found');
         return;
       }
 
-      const lines = input.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-      const domains = [...new Set(lines.map(normalizeDomain).filter(Boolean))];
-
-      if (domains.length === 0) {
-        showToast('⚠ No valid domains found');
-        return;
+      // Report invalid lines only (not cap-related skips — there are none now)
+      if (skipped.length) {
+        showToast(`ℹ ${skipped.length} invalid line${skipped.length > 1 ? 's' : ''} skipped`);
       }
+
+      const totalDomains = valid.length;
+      const totalBatches = Math.ceil(totalDomains / BATCH_SIZE);
 
       running = true;
       _cancelRequested = false;
-      results = domains.map(d => ({
-        domain: d,
-        status: 'pending',
-        eppCodes: [],
-        registrar: '',
-        expiry: '',
-        hostingProvider: '',
-        source: '',
-        fromCache: false
-      }));
-
-      // Reset filters
+      results = valid.map(d => ({ domain: d, status: 'pending', registrar: '—', expiry: '—', eppCodes: [] }));
       currentStatusFilter = 'all';
-      currentEPPFilter = null;
+      currentEPPFilter    = null;
 
-      // UI setup
-      $('runBtn').disabled = true;
-      const cancelBtn = $('cancelBtn');
-      cancelBtn.disabled = false;
+      $('runBtn').disabled    = true;
       $('exportBtn').disabled = true;
-      $('progressWrap').style.display = 'block';
-      $('statsRow').style.display = 'none';
-      $('filterSection').style.display = 'none';
-      $('eppFilterGroup').style.display = 'none';
-
-      const bar = $('progressBar');
-      bar.style.width = '0%';
-      bar.parentElement.setAttribute('aria-valuenow', 0);
-      $('progressLabel').textContent = 'Starting…';
-      $('progressBatch').textContent = '';
+      const CANCEL_BTN_HTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel';
+      const cancelBtn = $('cancelBtn');
+      cancelBtn.innerHTML = CANCEL_BTN_HTML;
+      cancelBtn.disabled = false;
+      $('progressWrap').style.display  = 'block';
+      $('statsRow').style.display      = 'flex';
+      $('filterSection').style.display = 'flex';
 
       renderTable();
-      updateStatusFilterBar();
+      updateStats();
 
-      // Batching
-      const totalDomains  = domains.length;
-      const totalBatches  = Math.ceil(totalDomains / BATCH_SIZE);
       let completedTotal = 0;
 
       for (let b = 0; b < totalBatches; b++) {
         if (_cancelRequested) break;
 
-        const batchStart   = b * BATCH_SIZE;
-        const batchEnd     = Math.min(batchStart + BATCH_SIZE, totalDomains);
-        const batchDomains = domains.slice(batchStart, batchEnd);
+        const batchStart = b * BATCH_SIZE;
+        const batchEnd   = Math.min(batchStart + BATCH_SIZE, totalDomains);
+        const batchDomains = valid.slice(batchStart, batchEnd);
 
-        // Pause between batches (skip for first batch)
+        // Batch pause between batches (not before the first one)
         if (b > 0) {
+          // Count down the inter-batch pause so user knows we're not frozen
           const pauseSteps = Math.ceil(BATCH_PAUSE / 500);
           for (let s = 0; s < pauseSteps; s++) {
             if (_cancelRequested) break;
@@ -1747,7 +2618,6 @@
 
       renderTable();
       updateStats();
-      updateStatusFilterBar();
       updateEPPFilterBar();
       updateCacheInfo();
       running          = false;
@@ -1790,7 +2660,7 @@
       const url  = URL.createObjectURL(blob);
       const a    = Object.assign(document.createElement('a'), {
         href: url,
-        download: `whoswho-${new Date().toISOString().slice(0, 10)}.csv`
+        download: `bulkwhois-${new Date().toISOString().slice(0, 10)}.csv`
       });
       document.body.appendChild(a);
       a.click();
