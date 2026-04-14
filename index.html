@@ -803,6 +803,97 @@
       width: fit-content;
     }
 
+    /* ── SKIPPED PANEL ── */
+    .skipped-wrap {
+      margin-bottom: 16px;
+      border: 1px solid rgba(246,166,35,.25);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(246,166,35,.04);
+    }
+
+    .skipped-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--yellow);
+      transition: background .15s;
+    }
+
+    .skipped-header:hover { background: rgba(246,166,35,.07); }
+
+    .skipped-count-badge {
+      background: rgba(246,166,35,.15);
+      border: 1px solid rgba(246,166,35,.3);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 11px;
+    }
+
+    .skipped-chevron {
+      margin-left: auto;
+      font-size: 13px;
+      transition: transform .2s;
+      opacity: .7;
+    }
+
+    .skipped-wrap.open .skipped-chevron { transform: rotate(90deg); }
+
+    .skipped-body {
+      display: none;
+      border-top: 1px solid rgba(246,166,35,.15);
+      padding: 10px 14px;
+      display: none;
+    }
+
+    .skipped-wrap.open .skipped-body { display: block; }
+
+    .skipped-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .skipped-table th {
+      text-align: left;
+      padding: 4px 10px 6px 0;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .skipped-table td {
+      padding: 5px 10px 5px 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      color: var(--para);
+    }
+
+    .skipped-table tr:last-child td { border-bottom: none; }
+
+    .skipped-raw {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text);
+      max-width: 340px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skipped-reason {
+      color: var(--yellow);
+      font-size: 11px;
+    }
+
     /* ── CACHE BAR ── */
     .cache-bar {
       display: flex;
@@ -1120,6 +1211,22 @@
     <div class="cache-bar">
       <span id="cacheInfo" style="opacity:.4">Cache empty</span>
       <button class="btn-cache-clear" id="cacheClearBtn">Clear cache</button>
+    </div>
+
+    <!-- Skipped / invalid lines panel — hidden until there are skips -->
+    <div class="skipped-wrap" id="skippedWrap" style="display:none" aria-live="polite">
+      <div class="skipped-header" id="skippedHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="skippedBody">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Skipped lines
+        <span class="skipped-count-badge" id="skippedCount">0</span>
+        <span class="skipped-chevron">›</span>
+      </div>
+      <div class="skipped-body" id="skippedBody" role="region">
+        <table class="skipped-table" id="skippedTable">
+          <thead><tr><th>Input</th><th>Reason</th></tr></thead>
+          <tbody id="skippedTbody"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="progress-wrap" id="progressWrap" role="region" aria-label="Check progress">
@@ -1548,6 +1655,19 @@
       // 5. Cache successful results only
       if (!result._failed) {
         const { _failed, ...clean } = result;
+
+        // 5b. RDAP false-available guard — some registries (e.g. nic.io) return 404
+        //     for delegated domains like github.io that are real but not registered
+        //     through the standard path. If RDAP says "available", do a quick DNS
+        //     A/NS lookup. If DNS resolves, the domain clearly exists and we mark
+        //     it as an error rather than lying to the user.
+        if (clean.status === 'available') {
+          const exists = await dnsExists(domain);
+          if (exists) {
+            clean.status   = 'error';
+            clean.registrar = 'RDAP unavailable (domain exists in DNS)';
+          }
+        }
         // 5a. For registered domains, try to detect hosting provider
         if (clean.status === 'registered') {
           const hostInfo = await detectHostingProvider(domain);
@@ -2529,16 +2649,15 @@
       const { valid, skipped } = parseAndValidateDomains(rawText);
 
       if (!valid.length) {
+        showSkippedPanel(skipped);
         showToast(skipped.length
           ? `⚠ No valid domains — ${skipped[0].reason}`
           : '⚠ No valid domains found');
         return;
       }
 
-      // Report invalid lines only (not cap-related skips — there are none now)
-      if (skipped.length) {
-        showToast(`ℹ ${skipped.length} invalid line${skipped.length > 1 ? 's' : ''} skipped`);
-      }
+      // Show persistent skipped-lines panel (replaces ephemeral toast)
+      showSkippedPanel(skipped);
 
       const totalDomains = valid.length;
       const totalBatches = Math.ceil(totalDomains / BATCH_SIZE);
@@ -2701,6 +2820,7 @@
       $('filterSection').style.display = 'none';
       $('eppFilterGroup').style.display = 'none';
       $('exportBtn').disabled = true;
+      hideSkippedPanel();
       const zone = $('dropZone');
       zone.classList.remove('loaded');
       zone.querySelector('.drop-text').innerHTML = `Drop a <strong>.txt</strong> or <strong>.csv</strong> file here, or <span class="drop-link">browse</span>`;
@@ -2710,6 +2830,75 @@
           <div class="icon">🔍</div>
           <p>Enter domains above and click <strong>Check Domains</strong></p>
         </div>`;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DNS EXISTENCE CHECK  (used to guard against false-available RDAP results)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Returns true if the domain has at least one A, AAAA, or NS record in DNS.
+     * Uses Cloudflare DoH. Fails silently (returns false) on network error so
+     * we never block a result — worst case we show a false-available uncorrected.
+     */
+    async function dnsExists(domain) {
+      const types = ['A', 'NS'];
+      for (const type of types) {
+        try {
+          const res = await fetch(
+            `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${type}`,
+            { headers: { Accept: 'application/dns-json' }, signal: makeSignal(5000) }
+          );
+          if (!res.ok) continue;
+          const json = await res.json();
+          // NXDOMAIN = rcode 3; any answer records = domain exists
+          if (json.Status === 0 && Array.isArray(json.Answer) && json.Answer.length > 0) return true;
+        } catch { /* network/timeout — treat as unknown */ }
+      }
+      return false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SKIPPED PANEL  (persistent inline log of invalid/skipped input lines)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function showSkippedPanel(skipped) {
+      const wrap = $('skippedWrap');
+      if (!skipped || !skipped.length) {
+        wrap.style.display = 'none';
+        return;
+      }
+
+      $('skippedCount').textContent = skipped.length;
+      $('skippedTbody').innerHTML = skipped.map(s =>
+        `<tr>
+          <td><span class="skipped-raw">${escHtml(s.raw)}</span></td>
+          <td><span class="skipped-reason">${escHtml(s.reason)}</span></td>
+        </tr>`
+      ).join('');
+
+      wrap.style.display = 'block';
+      // Auto-expand when first shown
+      wrap.classList.add('open');
+      $('skippedHeader').setAttribute('aria-expanded', 'true');
+      $('skippedBody').style.display = 'block';
+    }
+
+    function hideSkippedPanel() {
+      const wrap = $('skippedWrap');
+      wrap.style.display = 'none';
+      wrap.classList.remove('open');
+      $('skippedHeader').setAttribute('aria-expanded', 'false');
+      $('skippedBody').style.display = 'none';
+    }
+
+    function toggleSkippedPanel() {
+      const wrap   = $('skippedWrap');
+      const header = $('skippedHeader');
+      const body   = $('skippedBody');
+      const isOpen = wrap.classList.toggle('open');
+      header.setAttribute('aria-expanded', isOpen);
+      body.style.display = isOpen ? 'block' : 'none';
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2762,6 +2951,10 @@
 
       // ── Button wiring — all event listeners in one place, no inline onclick ──
       $('infoToggle').addEventListener('click', toggleInfo);
+      $('skippedHeader').addEventListener('click', toggleSkippedPanel);
+      $('skippedHeader').addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSkippedPanel(); }
+      });
       $('runBtn').addEventListener('click', () => runCheck().catch(err => {
         console.error('runCheck failed:', err);
         showToast('⚠ Unexpected error — check console');
