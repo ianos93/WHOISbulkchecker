@@ -1411,6 +1411,11 @@
 
       let d = raw.trim().toLowerCase();
 
+      // 0. Early-exit for comment tokens and blank strings — these should have
+      //    been filtered by parseAndValidateDomains already, but guard here too
+      //    in case sanitizeDomain is called directly (e.g. from CSV import).
+      if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'comment or empty' };
+
       // 1. Force through the browser's native URL parser to handle IDNs gracefully
       try {
         const withProtocol = d.match(/^https?:\/\//i) ? d : `http://${d}`;
@@ -1433,16 +1438,13 @@
       // 3. Strip subdomains using the Public Suffix List
       d = getRootDomain(d);
 
-      // 4. Skip blank lines and comment lines
-      if (!d || d.startsWith('#') || d.startsWith('//')) return { ok: false, reason: 'empty or comment' };
-
-      // 5. Must not exceed RFC max length
+      // 4. Must not exceed RFC max length
       if (d.length > MAX_FQDN) return { ok: false, reason: `exceeds ${MAX_FQDN} chars` };
 
-      // 6. Must have at least one dot
+      // 5. Must have at least one dot
       if (!d.includes('.')) return { ok: false, reason: 'no TLD' };
 
-      // 7. Validate each label (Now safely allows punycode)
+      // 6. Validate each label (Now safely allows punycode)
       const labels = d.split('.');
       for (const label of labels) {
         if (!label) return { ok: false, reason: 'empty label' };
@@ -1452,7 +1454,7 @@
         }
       }
 
-      // 8. TLD must be at least 2 chars and all alpha OR a punycode TLD
+      // 7. TLD must be at least 2 chars and all alpha OR a punycode TLD
       const tld = labels[labels.length - 1];
       if (!/^[a-z]{2,}$/.test(tld) && !/^xn--[a-z0-9-]+$/.test(tld)) {
          return { ok: false, reason: `invalid TLD: ${tld}` };
@@ -1467,20 +1469,37 @@
      * No hard cap — all valid domains are returned; queue handles batching.
      */
     function parseAndValidateDomains(text) {
-      // Normalize separators: commas, spaces, and newlines all accepted
-      const normalized = text
-        .replace(/,/g, '\n')
-        .replace(/[ \t]+/g, '\n');
+      // ── Step 1: work line-by-line so we can strip comments before splitting ──
+      // A line starting with # or // is a comment — drop it entirely (no log entry).
+      // A line with an inline # comment (e.g. "example.com # note") has the comment
+      // portion stripped before further processing.
+      const rawLines = text.split(/\r?\n/);
+      const tokenLines = [];
 
-      const lines  = normalized.split(/\r?\n/);
+      for (const raw of rawLines) {
+        const trimmed = raw.trim();
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue; // silent skip
+
+        // Strip inline comments
+        const withoutComment = trimmed.replace(/#.*$/, '').trim();
+        if (!withoutComment) continue;
+
+        // ── Step 2: within each (comment-stripped) line, split on commas or runs
+        // of whitespace — this is how multi-domain-per-line input works.
+        // But we only add tokens that look non-trivially like a domain attempt
+        // (i.e. contain at least one non-space character).
+        const tokens = withoutComment.split(/[\s,]+/).filter(Boolean);
+        tokenLines.push(...tokens);
+      }
+
       const valid   = [];
       const skipped = [];
       const seen    = new Set();
 
-      for (const line of lines) {
-        const r = sanitizeDomain(line);
+      for (const token of tokenLines) {
+        const r = sanitizeDomain(token);
         if (!r.ok) {
-          if (line.trim()) skipped.push({ raw: line.trim().slice(0, 80), reason: r.reason });
+          skipped.push({ raw: token.slice(0, 80), reason: r.reason });
           continue;
         }
         if (seen.has(r.domain)) continue; // silently deduplicate
@@ -1662,8 +1681,13 @@
         //     A/NS lookup. If DNS resolves, the domain clearly exists and we mark
         //     it as an error rather than lying to the user.
         if (clean.status === 'available') {
-          const exists = await dnsExists(domain);
-          if (exists) {
+          const dnsResult = await dnsExists(domain);
+          if (dnsResult === 'authority') {
+            // NS in Authority = PSL-delegated namespace (e.g. github.io, vercel.app).
+            // RDAP doesn't track these as registrations; treat as a special note.
+            clean.status   = 'error';
+            clean.registrar = 'PSL-delegated namespace — not a registrable domain';
+          } else if (dnsResult === 'answer') {
             clean.status   = 'error';
             clean.registrar = 'RDAP unavailable (domain exists in DNS)';
           }
@@ -2837,12 +2861,18 @@
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Returns true if the domain has at least one A, AAAA, or NS record in DNS.
-     * Uses Cloudflare DoH. Fails silently (returns false) on network error so
-     * we never block a result — worst case we show a false-available uncorrected.
+     * Checks whether a domain has any DNS presence.
+     * Returns: 'answer'    — has A/AAAA/NS records in the Answer section
+     *          'authority' — has NS records in the Authority section (delegated zone)
+     *          false       — NXDOMAIN or lookup failed
+     *
+     * Checking Authority covers cases like github.io, which is a PSL-delegated
+     * namespace: it has NS records in the Authority section but no direct Answer
+     * records, so RDAP returns 404 while the domain clearly exists in DNS.
      */
     async function dnsExists(domain) {
       const types = ['A', 'NS'];
+      let hasAuthority = false;
       for (const type of types) {
         try {
           const res = await fetch(
@@ -2851,11 +2881,16 @@
           );
           if (!res.ok) continue;
           const json = await res.json();
-          // NXDOMAIN = rcode 3; any answer records = domain exists
-          if (json.Status === 0 && Array.isArray(json.Answer) && json.Answer.length > 0) return true;
+          if (json.Status !== 0) continue; // NXDOMAIN (3) or other error
+          // Direct answer records — domain definitely exists
+          if (Array.isArray(json.Answer) && json.Answer.length > 0) return 'answer';
+          // NS records in Authority = zone is delegated; domain exists as a namespace
+          if (Array.isArray(json.Authority) && json.Authority.some(r => r.type === 2)) {
+            hasAuthority = true;
+          }
         } catch { /* network/timeout — treat as unknown */ }
       }
-      return false;
+      return hasAuthority ? 'authority' : false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
