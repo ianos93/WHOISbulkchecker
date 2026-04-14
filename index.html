@@ -1163,7 +1163,7 @@
             Technical Notes
           </div>
           <ul class="info-list">
-            <li>Uses the <strong>IANA RDAP bootstrap</strong> to query each TLD's authoritative registry directly, with <strong>rdap.org</strong> as a proxy fallback</li>
+            <li>Uses a <strong>3-tier lookup pipeline</strong>: (1) IANA RDAP bootstrap to each TLD's authoritative registry, (2) <strong>rdap.org</strong> proxy fallback, (3) legacy <strong>WHOIS via who-dat</strong> for domains where RDAP is unavailable (e.g. PSL-delegated domains like github.io, IDN ccTLDs)</li>
             <li>Rate limited to <strong>5 requests / 2 seconds</strong>. Large lists are split into batches of 50 to avoid overwhelming registries</li>
             <li><strong>Hosting provider</strong> is detected by resolving the domain's <strong>A records</strong> via Cloudflare DoH, then looking up the IP via <strong>ipwho.is</strong> (with <strong>ipinfo.io</strong> as a fallback). If proxying is detected, it falls back to NS pattern matching.</li>
             <li><strong>ccTLD Coverage:</strong> RDAP coverage is excellent for gTLDs (.com, .net, .app), but many ccTLDs (like .uk, .de, .au) strictly use legacy WHOIS port 43 and may return errors here.</li>
@@ -1283,7 +1283,7 @@
     <div class="footer-inner">
       <span>WHO'SWHO &nbsp;·&nbsp; Built by <a href="https://github.com/ianos93/WHOISbulkchecker/" target="_blank" rel="noopener noreferrer"><strong>ianos</strong></a></span>
       <span class="footer-sep">·</span>
-      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a> &amp; <a href="https://ip-api.com" target="_blank" rel="noopener noreferrer">ip-api.com</a></span>
+      <span>Data via <a href="https://rdap.org" target="_blank" rel="noopener noreferrer">rdap.org</a>, <a href="https://www.iana.org/assignments/rdap-dns/rdap-dns.xhtml" target="_blank" rel="noopener noreferrer">IANA RDAP</a>, <a href="https://who-dat.as93.net" target="_blank" rel="noopener noreferrer">who-dat WHOIS</a> &amp; <a href="https://ipwho.is" target="_blank" rel="noopener noreferrer">ipwho.is</a></span>
       <span class="footer-sep">·</span>
       <span>No data stored &nbsp;·&nbsp; MIT License</span>
     </div>
@@ -1646,9 +1646,13 @@
       }
       return _rdapBootstrap.get(tld.toLowerCase()) || null;
     }
-
     // ─────────────────────────────────────────────────────────────────────────
-    // RDAP FETCH  (primary: direct registry RDAP, fallback: rdap.org proxy)
+    // LOOKUP PIPELINE
+    //   Tier 1 — Direct registry RDAP (via IANA bootstrap)
+    //   Tier 2 — rdap.org proxy (CORS-safe, covers many ccTLDs)
+    //   Tier 3 — who-dat WHOIS (legacy port-43 WHOIS via JSON API)
+    //            Used when both RDAP tiers fail OR when RDAP returns a false-
+    //            available that DNS confirms is a live domain.
     // ─────────────────────────────────────────────────────────────────────────
     async function checkDomain(domain) {
       // 1. Cache hit
@@ -1658,59 +1662,159 @@
       // 2. Rate-limit gate
       await rateLimiter.wait();
 
-      // 3. Try direct registry RDAP via IANA bootstrap first,
-      //    then fall back to rdap.org proxy if bootstrap fails or TLD unknown.
+      // 3. Tier 1 — direct registry RDAP via IANA bootstrap
       const tld = domain.split('.').pop();
       const registryBase = await getRDAPBase(tld);
-
       let result = await fetchRDAP(domain, registryBase);
 
-      // 4. If direct registry RDAP failed, try rdap.org as a proxy fallback
+      // 4. Tier 2 — rdap.org proxy fallback (only if Tier 1 had a registry to try)
       if (result._failed && registryBase) {
         await rateLimiter.wait();
-        result = await fetchRDAP(domain, null); // null → use rdap.org
+        result = await fetchRDAP(domain, null);
       }
 
-      // 5. Cache successful results only
+      // 5. Process a successful RDAP result
       if (!result._failed) {
         const { _failed, ...clean } = result;
 
-        // 5b. RDAP false-available guard — some registries (e.g. nic.io) return 404
-        //     for delegated domains like github.io that are real but not registered
-        //     through the standard path. If RDAP says "available", do a quick DNS
-        //     A/NS lookup. If DNS resolves, the domain clearly exists and we mark
-        //     it as an error rather than lying to the user.
+        // 5a. False-available guard — some registries (e.g. nic.io) return 404
+        //     for PSL-delegated domains (github.io, vercel.app) that are real
+        //     registrations but aren't indexed as standard domain objects.
+        //     When RDAP says "available", confirm with DNS before trusting it.
+        //     If DNS confirms existence, escalate to Tier 3 (WHOIS) for real data.
         if (clean.status === 'available') {
           const dnsResult = await dnsExists(domain);
-          if (dnsResult === 'authority') {
-            // NS in Authority = PSL-delegated namespace (e.g. github.io, vercel.app).
-            // RDAP doesn't track these as registrations; treat as a special note.
-            clean.status   = 'error';
-            clean.registrar = 'PSL-delegated namespace — not a registrable domain';
-          } else if (dnsResult === 'answer') {
-            clean.status   = 'error';
-            clean.registrar = 'RDAP unavailable (domain exists in DNS)';
+          if (dnsResult) {
+            // Domain exists in DNS — try WHOIS to get actual registration data
+            const whoisResult = await fetchWHOIS(domain);
+            if (!whoisResult._failed) {
+              return await _finalize(domain, whoisResult);
+            }
+            // WHOIS also failed — show a meaningful error rather than false-available
+            clean.status    = 'error';
+            clean.registrar = dnsResult === 'authority'
+              ? 'PSL-delegated namespace — WHOIS lookup failed'
+              : 'Domain exists in DNS but WHOIS lookup failed';
           }
         }
-        // 5a. For registered domains, try to detect hosting provider
-        if (clean.status === 'registered') {
-          const hostInfo = await detectHostingProvider(domain);
-          clean.hostingProvider = hostInfo?.org || null;
-          clean.hostAsn         = hostInfo?.asn || null;
-          clean.hostAbuse       = hostInfo?.abuse || null;
-        } else {
-          clean.hostingProvider = null;
-          clean.hostAsn         = null;
-          clean.hostAbuse       = null;
-        }
-        cacheSet(domain, clean);
-        return { ...clean, fromCache: false };
+
+        return await _finalize(domain, clean);
       }
 
-      // Return the error result as-is (don't cache errors)
+      // 6. Tier 3 — both RDAP tiers failed; try legacy WHOIS as last resort.
+      //    Covers: ccTLDs with no RDAP, IDN quirks, PSL-delegated domains.
+      const whoisResult = await fetchWHOIS(domain);
+      if (!whoisResult._failed) {
+        return await _finalize(domain, whoisResult);
+      }
+
+      // 7. All three tiers failed — return error, don't cache
       const { _failed, ...errResult } = result;
       errResult.hostingProvider = null;
       return { ...errResult, fromCache: false };
+    }
+
+    /** Shared post-processing: hosting detection, cache write, return. */
+    async function _finalize(domain, clean) {
+      if (clean.status === 'registered') {
+        const hostInfo = await detectHostingProvider(domain);
+        clean.hostingProvider = hostInfo?.org || null;
+        clean.hostAsn         = hostInfo?.asn || null;
+        clean.hostAbuse       = hostInfo?.abuse || null;
+      } else {
+        clean.hostingProvider = null;
+        clean.hostAsn         = null;
+        clean.hostAbuse       = null;
+      }
+      cacheSet(domain, clean);
+      return { ...clean, fromCache: false };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TIER 3: WHOIS FALLBACK  (who-dat.as93.net — free, no-CORS, JSON API)
+    // Wraps legacy port-43 WHOIS in a structured JSON response.
+    // Used when both RDAP tiers fail, or when RDAP returns a false-available
+    // that DNS confirms is a live domain (e.g. github.io, münchen.de).
+    // ─────────────────────────────────────────────────────────────────────────
+    async function fetchWHOIS(domain) {
+      try {
+        const res = await fetch(
+          `https://who-dat.as93.net/${encodeURIComponent(domain)}`,
+          { signal: makeSignal(12000), credentials: 'omit' }
+        );
+
+        // 404 = not found in WHOIS either → genuinely available
+        if (res.status === 404) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'WHOIS' };
+        }
+
+        if (!res.ok) return _whoisError(domain, `WHOIS ${res.status}`);
+
+        let data;
+        try { data = await res.json(); } catch { return _whoisError(domain, 'WHOIS invalid JSON'); }
+
+        // who-dat wraps the record under a "domain" key; some responses are flat
+        const w = data.domain || data;
+
+        // Parse expiry date — who-dat returns ISO strings or null
+        const parseDate = (val) => {
+          if (!val) return '—';
+          try { return new Date(val).toISOString().slice(0, 10); } catch { return '—'; }
+        };
+
+        // Map EPP status strings — who-dat returns full URLs like
+        // "https://icann.org/epp#clientTransferProhibited"; extract the fragment.
+        const mapStatus = (arr) => {
+          if (!Array.isArray(arr)) return [];
+          return [...new Set(
+            arr.map(s => {
+              const hash = s.indexOf('#');
+              return hash !== -1 ? s.slice(hash + 1) : s;
+            }).filter(Boolean)
+          )];
+        };
+
+        const registrar  = w.registrar?.name || w.registrar || '—';
+        const expiry     = parseDate(w.expiration_date || w.expiry_date);
+        const created    = parseDate(w.creation_date);
+        const updated    = parseDate(w.updated_date);
+        const eppCodes   = mapStatus(w.status || w.domain_status);
+        const nameservers = Array.isArray(w.name_servers)
+          ? w.name_servers.map(s => s.toLowerCase()).filter(Boolean)
+          : null;
+
+        // Treat as available if the registrar field is missing/empty
+        if (!w.registrar && !w.creation_date && eppCodes.length === 0) {
+          return { domain, status: 'available', registrar: '—', expiry: '—', eppCodes: [], source: 'WHOIS' };
+        }
+
+        return {
+          domain,
+          status:       'registered',
+          registrar:    String(registrar),
+          expiry,
+          created,
+          updated,
+          eppCodes,
+          nameservers,
+          source:       'WHOIS',
+          // Fields WHOIS doesn't provide — leave null so detail panel hides them
+          abuseEmail:   null,
+          abusePhone:   null,
+          ianaId:       null,
+          registrarUrl: null,
+        };
+
+      } catch (e) {
+        const reason = (e.name === 'TimeoutError' || e.name === 'AbortError')
+          ? 'WHOIS timeout'
+          : `WHOIS: ${e.message.slice(0, 50)}`;
+        return _whoisError(domain, reason);
+      }
+    }
+
+    function _whoisError(domain, reason) {
+      return { domain, status: 'error', registrar: reason, expiry: '—', eppCodes: [], source: 'WHOIS', _failed: true };
     }
 
     async function fetchRDAP(domain, registryBase) {
