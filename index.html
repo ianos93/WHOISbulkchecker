@@ -1094,8 +1094,38 @@
     .pill-yellow { background: rgba(246,166,35,.12); color: var(--yellow);   border: 1px solid rgba(246,166,35,.25); }
     .pill-orange { background: rgba(255,137,6,.1);   color: var(--accent);   border: 1px solid rgba(255,137,6,.25); }
 
-    /* ── FOOTER ── */
-    footer { margin-top: 44px; padding-bottom: 8px; }
+    /* ── SORTABLE HEADERS ── */
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    th.sortable:hover { color: var(--para); }
+    th.sortable.sort-active { color: var(--accent); }
+
+    .sort-icon {
+      display: inline-block;
+      margin-left: 5px;
+      opacity: .35;
+      font-style: normal;
+      font-size: 10px;
+      vertical-align: middle;
+      transition: opacity .15s, transform .2s;
+    }
+
+    th.sortable:hover .sort-icon { opacity: .6; }
+    th.sortable.sort-active .sort-icon { opacity: 1; color: var(--accent); }
+    th.sortable.sort-desc .sort-icon { transform: scaleY(-1); }
+
+    /* ── REDUCED MOTION ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
 
     .footer-inner {
       display: flex;
@@ -1322,6 +1352,8 @@
     let currentEPPFilter   = null;
     let running            = false;
     let renderRafId        = null;
+    let sortCol            = null;   // 'domain' | 'status' | 'expiry' | 'registrar'
+    let sortDir            = 'asc';  // 'asc' | 'desc'
 
     // ─────────────────────────────────────────────────────────────────────────
     // CONSTANTS
@@ -2318,17 +2350,41 @@
       const eppFilterLower = currentEPPFilter ? currentEPPFilter.toLowerCase() : null;
       // Build the filter set once outside the loop — not once per row
       const eppFilterSet = eppFilterLower ? new Set([eppFilterLower]) : null;
-      const parts = [];
 
-      for (const r of results) {
-        // Status filter
-        if (currentStatusFilter !== 'all' && r.status !== currentStatusFilter) continue;
-        // EPP filter — O(1) Set lookup; build row's EPP set only when filter is active
+      // ── Filter ──
+      let filtered = results.filter(r => {
+        if (currentStatusFilter !== 'all' && r.status !== currentStatusFilter) return false;
         if (eppFilterSet) {
           const rowEPP = new Set((r.eppCodes || []).map(c => c.toLowerCase()));
-          if (!rowEPP.has(eppFilterLower)) continue;
+          if (!rowEPP.has(eppFilterLower)) return false;
         }
+        return true;
+      });
 
+      // ── Sort ──
+      if (sortCol) {
+        const STATUS_ORDER = { registered: 0, available: 1, error: 2, pending: 3 };
+        filtered = [...filtered].sort((a, b) => {
+          let va, vb;
+          if (sortCol === 'domain') {
+            va = a.domain; vb = b.domain;
+          } else if (sortCol === 'status') {
+            va = STATUS_ORDER[a.status] ?? 9; vb = STATUS_ORDER[b.status] ?? 9;
+          } else if (sortCol === 'expiry') {
+            va = a.expiry && a.expiry !== '—' ? new Date(a.expiry).getTime() : Infinity;
+            vb = b.expiry && b.expiry !== '—' ? new Date(b.expiry).getTime() : Infinity;
+          } else if (sortCol === 'registrar') {
+            va = (a.registrar || '').toLowerCase(); vb = (b.registrar || '').toLowerCase();
+          }
+          const cmp = typeof va === 'number'
+            ? va - vb
+            : String(va).localeCompare(String(vb));
+          return sortDir === 'asc' ? cmp : -cmp;
+        });
+      }
+
+      const parts = [];
+      for (const r of filtered) {
         const safeDomain = escHtml(r.domain);
         const domainCell = r.status === 'registered'
           ? `<a href="https://who.is/whois/${safeDomain}" target="_blank" rel="noopener noreferrer">${safeDomain}</a>`
@@ -2368,16 +2424,51 @@
         ? parts.join('')
         : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No results match the active filters</td></tr>`;
 
+      // Build sortable header cells
+      const thData = [
+        { label: 'Domain',    col: 'domain' },
+        { label: 'Avail.',    col: 'status' },
+        { label: 'EPP Flags', col: null },
+        { label: 'Registrar', col: 'registrar' },
+        { label: 'Expiry',    col: 'expiry' },
+        { label: 'Hosting',   col: null },
+        { label: '',          col: null, style: 'width:32px' },
+      ];
+
+      const theadCells = thData.map(({ label, col, style }) => {
+        if (!col) return `<th${style ? ` style="${style}"` : ''}>${label}</th>`;
+        const isActive = sortCol === col;
+        const isDesc   = isActive && sortDir === 'desc';
+        return `<th class="sortable${isActive ? ' sort-active' : ''}${isDesc ? ' sort-desc' : ''}"
+                    data-sort-col="${col}"
+                    aria-sort="${isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}"
+                    title="Sort by ${label}">
+                  ${label}<i class="sort-icon">▲</i>
+                </th>`;
+      }).join('');
+
       // Single innerHTML write per render cycle
       $('tableContainer').innerHTML = `
         <div class="table-wrap">
           <table>
-            <thead><tr>
-              <th>Domain</th><th>Avail.</th><th>EPP Flags</th><th>Registrar</th><th>Expiry</th><th>Hosting</th><th style="width:32px"></th>
-            </tr></thead>
+            <thead><tr>${theadCells}</tr></thead>
             <tbody>${tbody}</tbody>
           </table>
         </div>`;
+
+      // Wire header sort clicks
+      $('tableContainer').querySelectorAll('th[data-sort-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sortCol;
+          if (sortCol === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortCol = col;
+            sortDir = 'asc';
+          }
+          renderTable();
+        });
+      });
 
       // Cancel any previously queued frame before requesting a new one
       if (renderRafId) cancelAnimationFrame(renderRafId);
@@ -2957,6 +3048,8 @@
       results = [];
       currentStatusFilter = 'all';
       currentEPPFilter    = null;
+      sortCol             = null;
+      sortDir             = 'asc';
 
       // Tear down EPP bar listener
       if (_eppBarListenerController) { _eppBarListenerController.abort(); _eppBarListenerController = null; }
