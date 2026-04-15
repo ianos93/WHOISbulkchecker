@@ -844,14 +844,33 @@
 
     .skipped-wrap.open .skipped-chevron { transform: rotate(90deg); }
 
-    .skipped-body {
-      display: none;
-      border-top: 1px solid rgba(246,166,35,.15);
-      padding: 10px 14px;
-      display: none;
+    /* Grid trick for smooth height animation (same pattern as detail rows) */
+    .skipped-body-wrapper {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .skipped-wrap.open .skipped-body { display: block; }
+    .skipped-wrap.open .skipped-body-wrapper {
+      grid-template-rows: 1fr;
+    }
+
+    .skipped-body {
+      overflow: hidden;
+      border-top: 1px solid transparent;
+      opacity: 0;
+      transition: opacity 0.28s ease, border-top-color 0.28s ease;
+      padding: 0;
+    }
+
+    .skipped-wrap.open .skipped-body {
+      opacity: 1;
+      border-top-color: rgba(246,166,35,.15);
+    }
+
+    .skipped-body-inner {
+      padding: 10px 14px;
+    }
 
     .skipped-table {
       width: 100%;
@@ -1221,11 +1240,15 @@
         <span class="skipped-count-badge" id="skippedCount">0</span>
         <span class="skipped-chevron">›</span>
       </div>
-      <div class="skipped-body" id="skippedBody" role="region">
-        <table class="skipped-table" id="skippedTable">
-          <thead><tr><th>Input</th><th>Reason</th></tr></thead>
-          <tbody id="skippedTbody"></tbody>
-        </table>
+      <div class="skipped-body-wrapper">
+        <div class="skipped-body" id="skippedBody" role="region">
+          <div class="skipped-body-inner">
+            <table class="skipped-table" id="skippedTable">
+              <thead><tr><th>Input</th><th>Reason</th></tr></thead>
+              <tbody id="skippedTbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3017,10 +3040,11 @@
       ).join('');
 
       wrap.style.display = 'block';
+      // Trigger reflow so the transition plays from the collapsed state
+      wrap.offsetHeight;
       // Auto-expand when first shown
       wrap.classList.add('open');
       $('skippedHeader').setAttribute('aria-expanded', 'true');
-      $('skippedBody').style.display = 'block';
     }
 
     function hideSkippedPanel() {
@@ -3028,16 +3052,13 @@
       wrap.style.display = 'none';
       wrap.classList.remove('open');
       $('skippedHeader').setAttribute('aria-expanded', 'false');
-      $('skippedBody').style.display = 'none';
     }
 
     function toggleSkippedPanel() {
       const wrap   = $('skippedWrap');
       const header = $('skippedHeader');
-      const body   = $('skippedBody');
       const isOpen = wrap.classList.toggle('open');
       header.setAttribute('aria-expanded', isOpen);
-      body.style.display = isOpen ? 'block' : 'none';
     }
 
     // ─────────────────────────────────────────────────────────────────────────
