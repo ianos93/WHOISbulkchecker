@@ -885,23 +885,31 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: .08em;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
+      color: rgba(246,166,35,.5);
+      border-bottom: 1px solid rgba(246,166,35,.15);
     }
 
     .skipped-table td {
-      padding: 5px 10px 5px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 6px 10px 6px 0;
+      border-bottom: 1px solid rgba(246,166,35,.08);
       vertical-align: middle;
-      color: var(--para);
     }
 
     .skipped-table tr:last-child td { border-bottom: none; }
 
+    .skipped-table tr:hover td {
+      background: rgba(246,166,35,.04);
+    }
+
     .skipped-raw {
       font-family: var(--font-mono);
       font-size: 11px;
-      color: var(--text);
+      color: rgba(246,166,35,.9);
+      background: rgba(246,166,35,.07);
+      border: 1px solid rgba(246,166,35,.15);
+      border-radius: 4px;
+      padding: 2px 7px;
+      display: inline-block;
       max-width: 340px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -909,8 +917,9 @@
     }
 
     .skipped-reason {
-      color: var(--yellow);
+      color: rgba(246,166,35,.65);
       font-size: 11px;
+      font-style: italic;
     }
 
     /* ── CACHE BAR ── */
