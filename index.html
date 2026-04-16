@@ -806,10 +806,10 @@
     /* ── SKIPPED PANEL ── */
     .skipped-wrap {
       margin-bottom: 16px;
-      border: 1px solid rgba(246,166,35,.25);
+      border: 1px solid rgba(246,166,35,.35);
       border-radius: 10px;
       overflow: hidden;
-      background: rgba(246,166,35,.04);
+      background: #1a1508;
     }
 
     .skipped-header {
@@ -822,24 +822,26 @@
       font-size: 12px;
       font-weight: 600;
       color: var(--yellow);
+      background: #1f1a09;
       transition: background .15s;
     }
 
-    .skipped-header:hover { background: rgba(246,166,35,.07); }
+    .skipped-header:hover { background: #261f0a; }
 
     .skipped-count-badge {
-      background: rgba(246,166,35,.15);
-      border: 1px solid rgba(246,166,35,.3);
+      background: rgba(246,166,35,.18);
+      border: 1px solid rgba(246,166,35,.4);
       border-radius: 4px;
       padding: 1px 7px;
       font-size: 11px;
+      color: var(--yellow);
     }
 
     .skipped-chevron {
       margin-left: auto;
       font-size: 13px;
       transition: transform .2s;
-      opacity: .7;
+      color: rgba(246,166,35,.6);
     }
 
     .skipped-wrap.open .skipped-chevron { transform: rotate(90deg); }
@@ -861,12 +863,12 @@
       opacity: 0;
       transition: opacity 0.28s ease, border-top-color 0.28s ease;
       padding: 0;
-      background: rgba(246,166,35,.04);
+      background: #1a1508;
     }
 
     .skipped-wrap.open .skipped-body {
       opacity: 1;
-      border-top-color: rgba(246,166,35,.15);
+      border-top-color: rgba(246,166,35,.2);
     }
 
     .skipped-body-inner {
@@ -886,29 +888,30 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: .08em;
-      color: rgba(246,166,35,.5);
-      border-bottom: 1px solid rgba(246,166,35,.15);
+      color: rgba(246,166,35,.45);
+      border-bottom: 1px solid rgba(246,166,35,.18);
+      background: #1a1508;
     }
 
     .skipped-table td {
       padding: 6px 10px 6px 0;
-      border-bottom: 1px solid rgba(246,166,35,.08);
+      border-bottom: 1px solid rgba(246,166,35,.1);
       vertical-align: middle;
-      background: rgba(246,166,35,.04);
+      background: #1a1508;
     }
 
     .skipped-table tr:last-child td { border-bottom: none; }
 
     .skipped-table tr:hover td {
-      background: rgba(246,166,35,.09);
+      background: #211c09;
     }
 
     .skipped-raw {
       font-family: var(--font-mono);
       font-size: 11px;
-      color: rgba(246,166,35,.9);
-      background: rgba(246,166,35,.07);
-      border: 1px solid rgba(246,166,35,.15);
+      color: var(--yellow);
+      background: rgba(246,166,35,.12);
+      border: 1px solid rgba(246,166,35,.25);
       border-radius: 4px;
       padding: 2px 7px;
       display: inline-block;
@@ -919,7 +922,7 @@
     }
 
     .skipped-reason {
-      color: rgba(246,166,35,.65);
+      color: rgba(246,166,35,.6);
       font-size: 11px;
       font-style: italic;
     }
