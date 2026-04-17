@@ -1637,27 +1637,33 @@ async function fetchAllPrints(card) {
 }
 
 async function applyCardOptions(card, options) {
+  // 1. Generate the unique cache key for these specific options
+  const optSuffix = (options.paperOnly ? '_paper' : '') + (options.firstPrint ? '_first' : '');
+  const variant = (usePremium ? 'premium' : 'default') + optSuffix;
+
+  // 2. CHECK CACHE FIRST: If we already did the First Print search previously, skip the network!
+  const cachedOptionCard = getCachedCard(card.name, card.set, null, variant);
+  if (cachedOptionCard) {
+    cachedOptionCard._fromCache = true;
+    return cachedOptionCard;
+  }
+
   let modifiedCard = card;
   let usedFallback = card._usedFallback || false;
-
-  // Fetch all prints for the initial card. printsCache deduplicates by card.id,
-  // so this is a free memory lookup if we already fetched this card's prints.
   let allPrints = null;
-  if (options.paperOnly || options.firstPrint) {
-    allPrints = await fetchAllPrints(modifiedCard);
+  
+  // 3. Hit the network only if necessary
+  if (options.paperOnly || options.firstPrint) { 
+    allPrints = await fetchAllPrints(modifiedCard); 
   }
 
   if (options.paperOnly && modifiedCard.games) {
     if (!modifiedCard.games.includes('paper')) {
       const paperPrints = allPrints ? allPrints.filter(c => c.games && c.games.includes('paper')) : [];
       if (paperPrints.length > 0) {
-        modifiedCard = paperPrints[0];
+        modifiedCard = paperPrints[0]; 
         usedFallback = true;
-        // Re-fetch prints for the switched card. printsCache makes this a single API
-        // call only if this card's ID hasn't been seen before — otherwise it's instant.
-        if (options.firstPrint) {
-          allPrints = await fetchAllPrints(modifiedCard);
-        }
+        if (options.firstPrint) allPrints = await fetchAllPrints(modifiedCard);
       } else {
         throw new Error('No paper printing found');
       }
@@ -1666,37 +1672,27 @@ async function applyCardOptions(card, options) {
 
   if (options.firstPrint) {
     const earlySetCodes = ['lea', 'leb', '2ed', 'arn', 'atq', 'leg', '3ed', 'drk', 'fem', 'ice', 'chr', 'hml', 'all', 'mir', 'vis', 'wth', 'tmp', 'sth', 'exo', 'usg', 'ulg', 'uds'];
-    
     const cardIsFromEarlySet = modifiedCard.set && earlySetCodes.includes(modifiedCard.set.toLowerCase());
     const originalEntry = card._originalEntry || {};
     const userSpecifiedMatchingSet = originalEntry.set && originalEntry.set.toLowerCase() === modifiedCard.set.toLowerCase();
     const skipSearch = cardIsFromEarlySet || userSpecifiedMatchingSet;
     
     if (!skipSearch && allPrints) {
-      // Filter out promos and digital, then take the oldest remaining print
       let candidates = allPrints.filter(c => !c.promo && !c.digital);
-      if (options.paperOnly) {
-        candidates = candidates.filter(c => c.games && c.games.includes('paper'));
-      }
-      // allPrints is already ordered asc by release date (oldest first)
-      if (candidates.length > 0 && candidates[0].id !== modifiedCard.id) {
-        modifiedCard = candidates[0];
-        usedFallback = true;
+      if (options.paperOnly) candidates = candidates.filter(c => c.games && c.games.includes('paper'));
+      if (candidates.length > 0 && candidates[0].id !== modifiedCard.id) { 
+        modifiedCard = candidates[0]; 
+        usedFallback = true; 
       }
     }
   }
 
   modifiedCard._usedFallback = usedFallback;
-  modifiedCard._fromCache = card._fromCache;
+  modifiedCard._fromCache = false;
   modifiedCard._originalEntry = card._originalEntry;
   
-  // Cache the transformed result with options flags baked into the variant key,
-  // so subsequent runs with the same options skip the whole options phase.
-  if (!card._fromCache) {
-    const optSuffix = (options.paperOnly ? '_paper' : '') + (options.firstPrint ? '_first' : '');
-    const variant = (usePremium ? 'premium' : 'default') + optSuffix;
-    setCachedCard(modifiedCard.name, modifiedCard.set, null, modifiedCard, variant);
-  }
+  // 4. ALWAYS cache the result so we never have to run this search again
+  setCachedCard(modifiedCard.name, modifiedCard.set, null, modifiedCard, variant);
   
   return modifiedCard;
 }
